@@ -1,0 +1,28 @@
+[package]
+name = "afd_poll"
+version = "0.1.0"
+authors = ["FXTi <zjxiang1998@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ntapi = "0.3.1"
+miow = "0.3.3"
+
+[dependencies.winapi]
+version = "0.3.7"
+features = [
+  "std",
+  "fileapi",
+  "handleapi",
+  "ioapiset",
+  "minwindef",
+  "namedpipeapi",
+  "ntdef",
+  "synchapi",
+  "winerror",
+  "winsock2",
+  "ws2def",
+  "ws2ipdef",
+]
