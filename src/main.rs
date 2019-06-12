@@ -21,7 +21,7 @@ struct AFD_POLL_INFO {
 }
 
 fn afd_poll(afd_helper_handle: HANDLE, poll_info: &mut AFD_POLL_INFO, overlapped: &Overlapped) -> i32 {
-    let iosb = IO_STATUS_BLOCK {
+    let mut iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u {
             Status: winapi::shared::ntstatus::STATUS_PENDING,
         },
