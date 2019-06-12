@@ -2,9 +2,9 @@ use miow::Overlapped;
 use ntapi::ntioapi::NtDeviceIoControlFile;
 use std::mem::size_of;
 use winapi::km::basedef::IO_STATUS_BLOCK;
-use winapi::minwindef::ULONG;
-use winapi::ntdef::NTSTATUS;
-use winapi::winnt::{HANDLE, LARGE_INTEGER};
+use winapi::shared::minwindef::ULONG;
+use winapi::shared::ntdef::NTSTATUS;
+use winapi::um::winnt::{HANDLE, LARGE_INTEGER};
 
 #[repr(C)]
 struct AFD_POLL_HANDLE_INFO {
@@ -28,7 +28,7 @@ fn afd_poll(afd_helper_handle: HANDLE, poll_info: &AFD_POLL_INFO, overlapped: &O
         NtDeviceIoControlFile(
             afd_helper_handle,
             0 as *mut _,
-            0 as *mut _,
+            None,
             overlapped.raw(),
             &iosb as *mut _,
             0x00012024,
