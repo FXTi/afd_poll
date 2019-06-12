@@ -13,16 +13,8 @@ miow = "0.3.3"
 [dependencies.winapi]
 version = "0.3.7"
 features = [
-  "std",
-  "fileapi",
-  "handleapi",
   "ioapiset",
   "minwindef",
-  "namedpipeapi",
   "ntdef",
-  "synchapi",
-  "winerror",
-  "winsock2",
-  "ws2def",
-  "ws2ipdef",
+  "basedef",
 ]
