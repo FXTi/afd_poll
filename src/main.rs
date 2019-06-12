@@ -2,7 +2,7 @@ use miow::Overlapped;
 use ntapi::ntioapi::{IO_STATUS_BLOCK_u, NtDeviceIoControlFile, IO_STATUS_BLOCK};
 use std::mem::size_of;
 use winapi::shared::minwindef::ULONG;
-use winapi::shared::ntdef::NTSTATUS;
+use winapi::shared::ntdef::{NTSTATUS, PVOID};
 use winapi::um::winnt::{HANDLE, LARGE_INTEGER};
 
 #[repr(C)]
@@ -36,9 +36,9 @@ fn afd_poll(afd_helper_handle: HANDLE, poll_info: &mut AFD_POLL_INFO, overlapped
             overlapped.raw() as *mut _,
             &mut iosb as *mut IO_STATUS_BLOCK,
             0x00012024,
-            &mut *poll_info as *mut _,
+            &mut *poll_info as *mut _ as PVOID,
             size_of::<AFD_POLL_INFO>() as u32,
-            &mut *poll_info as *mut _,
+            &mut *poll_info as *mut _ as PVOID,
             size_of::<AFD_POLL_INFO>() as u32,
         );
     }
