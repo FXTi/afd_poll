@@ -16,5 +16,4 @@ features = [
   "ioapiset",
   "minwindef",
   "ntdef",
-  "basedef",
 ]
