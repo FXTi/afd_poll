@@ -1,5 +1,5 @@
 use miow::Overlapped;
-use ntapi::ntioapi::{IO_STATUS_BLOCK_u, NtDeviceIoControlFile, IO_STATUS_BLOCK, PIO_STATUS_BLOCK};
+use ntapi::ntioapi::{IO_STATUS_BLOCK_u, NtDeviceIoControlFile, IO_STATUS_BLOCK};
 use std::mem::size_of;
 use winapi::shared::minwindef::ULONG;
 use winapi::shared::ntdef::NTSTATUS;
@@ -20,7 +20,7 @@ struct AFD_POLL_INFO {
     Handles: [AFD_POLL_HANDLE_INFO; 1],
 }
 
-fn afd_poll(afd_helper_handle: HANDLE, poll_info: &AFD_POLL_INFO, overlapped: &Overlapped) -> i32 {
+fn afd_poll(afd_helper_handle: HANDLE, poll_info: &mut AFD_POLL_INFO, overlapped: &Overlapped) -> i32 {
     let iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u {
             Status: winapi::shared::ntstatus::STATUS_PENDING,
@@ -36,9 +36,9 @@ fn afd_poll(afd_helper_handle: HANDLE, poll_info: &AFD_POLL_INFO, overlapped: &O
             overlapped.raw() as *mut _,
             &mut iosb as *mut IO_STATUS_BLOCK,
             0x00012024,
-            &poll_info as *mut _,
+            &mut poll_info as *mut _,
             size_of::<AFD_POLL_INFO>() as u32,
-            &poll_info as *mut _,
+            &mut poll_info as *mut _,
             size_of::<AFD_POLL_INFO>() as u32,
         );
     }
