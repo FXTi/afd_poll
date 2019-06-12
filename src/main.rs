@@ -34,7 +34,7 @@ fn afd_poll(afd_helper_handle: HANDLE, poll_info: &AFD_POLL_INFO, overlapped: &O
             0 as *mut _,
             None,
             overlapped.raw() as *mut _,
-            &iosb as *mut IO_STATUS_BLOCK as PIO_STATUS_BLOCK,
+            &iosb as *mut IO_STATUS_BLOCK,
             0x00012024,
             &poll_info as *mut _,
             size_of::<AFD_POLL_INFO>() as u32,
