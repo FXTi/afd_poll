@@ -23,19 +23,19 @@ struct AFD_POLL_INFO {
 
 fn afd_poll(afd_helper_handle: HANDLE, poll_info: &AFD_POLL_INFO, overlapped: &Overlapped) -> i32 {
     let mut iosb = IO_STATUS_BLOCK::new();
-    iosb.Status = winapi::ntstatus::STATUS_PENDING;
+    iosb.Status = winapi::shared::ntstatus::STATUS_PENDING;
     unsafe {
         NtDeviceIoControlFile(
             afd_helper_handle,
             0 as *mut _,
             None,
-            overlapped.raw(),
+            &overlapped.raw() as *mut _,
             &iosb as *mut _,
             0x00012024,
             &poll_info as *mut _,
-            size_of::<AFD_POLL_INFO>(),
+            size_of::<AFD_POLL_INFO>() as u32,
             &poll_info as *mut _,
-            size_of::<AFD_POLL_INFO>(),
+            size_of::<AFD_POLL_INFO>() as u32,
         );
     }
 
