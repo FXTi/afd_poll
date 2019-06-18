@@ -6,6 +6,7 @@ use winapi::shared::minwindef::{DWORD, LPVOID, ULONG};
 use winapi::shared::ntdef::{NTSTATUS, PVOID};
 use winapi::um::winnt::{HANDLE, LARGE_INTEGER};
 use winapi::um::winsock2::{WSAIoctl, SOCKET, SOCKET_ERROR, INVALID_SOCKET};
+use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 
 #[allow(non_snake_case)]
 #[repr(C)]
@@ -30,9 +31,9 @@ fn afd_poll(
     afd_helper_handle: HANDLE,
     poll_info: &mut AFD_POLL_INFO,
     overlapped: &mut OVERLAPPED,
-) -> i32 {
+) -> u32 {
     let mut piosb = overlapped.Internal as *mut _ as *mut IO_STATUS_BLOCK;
-    (*piosb).Status = STATUS_PENDING;
+    (*piosb).u.Status = STATUS_PENDING;
 
     unsafe {
         let status = NtDeviceIoControlFile(

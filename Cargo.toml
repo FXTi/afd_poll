@@ -17,4 +17,5 @@ features = [
   "minwindef",
   "ntdef",
   "winsock2",
+  "ntstatus",
 ]
