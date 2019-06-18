@@ -49,7 +49,7 @@ fn afd_poll(
             size_of::<AFD_POLL_INFO>() as u32,
             &mut *poll_info as *mut _ as PVOID,
             size_of::<AFD_POLL_INFO>() as u32,
-        );
+        )
     }
 
     match status {
