@@ -1,5 +1,6 @@
-use miow::Overlapped;
-use ntapi::ntioapi::{IO_STATUS_BLOCK_u, NtDeviceIoControlFile, IO_STATUS_BLOCK};
+use winapi::um::minwinbase::OVERLAPPED;
+use ntapi::ntioapi::{IO_STATUS_BLOCK_u, NtDeviceIoControlFile, IO_STATUS_BLOCK, PIO_STATUS_BLOCK};
+use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use winapi::shared::minwindef::{DWORD, LPVOID, ULONG};
 use winapi::shared::ntdef::{NTSTATUS, PVOID};
@@ -28,22 +29,18 @@ const IOCTL_AFD_POLL: ULONG = 0x00012024;
 fn afd_poll(
     afd_helper_handle: HANDLE,
     poll_info: &mut AFD_POLL_INFO,
-    overlapped: &Overlapped,
+    overlapped: &mut OVERLAPPED,
 ) -> i32 {
-    let mut iosb = IO_STATUS_BLOCK {
-        u: IO_STATUS_BLOCK_u {
-            Status: winapi::shared::ntstatus::STATUS_PENDING,
-        },
-        Information: 0,
-    };
+    let mut piosb = overlapped.Internal as *mut _ as *mut IO_STATUS_BLOCK;
+    (*piosb).Status = STATUS_PENDING;
 
     unsafe {
-        NtDeviceIoControlFile(
+        let status = NtDeviceIoControlFile(
             afd_helper_handle,
-            0 as *mut _,
+            overlapped.hEvent,
             None,
-            overlapped.raw() as *mut _,
-            &mut iosb as *mut IO_STATUS_BLOCK,
+            &mut *overlapped as *mut _ as PVOID,
+            piosb,
             IOCTL_AFD_POLL,
             &mut *poll_info as *mut _ as PVOID,
             size_of::<AFD_POLL_INFO>() as u32,
@@ -52,7 +49,11 @@ fn afd_poll(
         );
     }
 
-    0
+    match status {
+        STATUS_SUCCESS => 0,
+        STATUS_PENDING => ERROR_IO_PENDING,
+        _ => unsafe { RtlNtStatusToDosError(status) },
+    }
 }
 
 const SIO_BASE_HANDLE: DWORD = 0x48000022;
