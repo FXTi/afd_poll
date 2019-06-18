@@ -54,7 +54,7 @@ fn afd_poll(
 
     match status {
         STATUS_SUCCESS => 0,
-        STATUS_PENDING => ERROR_IO_PENDING,
+        STATUS_PENDING => WSAEINPROGRESS,
         _ => unsafe { RtlNtStatusToDosError(status) },
     }
 }
