@@ -33,7 +33,7 @@ fn afd_poll(
     poll_info: &mut AFD_POLL_INFO,
     overlapped: &mut OVERLAPPED,
 ) -> u32 {
-    let mut piosb = overlapped.Internal as *mut _ as *mut IO_STATUS_BLOCK;
+    let mut piosb = overlapped.Internal as *mut IO_STATUS_BLOCK;
     (*piosb).u.Status = STATUS_PENDING;
     let mut status = STATUS_PENDING;
 
