@@ -1,11 +1,12 @@
 use miow::Overlapped;
 use ntapi::ntioapi::{IO_STATUS_BLOCK_u, NtDeviceIoControlFile, IO_STATUS_BLOCK};
 use std::mem::size_of;
-use winapi::shared::minwindef::{DWORD, ULONG, LPVOID};
+use winapi::shared::minwindef::{DWORD, LPVOID, ULONG};
 use winapi::shared::ntdef::{NTSTATUS, PVOID};
 use winapi::um::winnt::{HANDLE, LARGE_INTEGER};
 use winapi::um::winsock2::{WSAIoctl, SOCKET};
 
+#[allow(non_snake_case)]
 #[repr(C)]
 struct AFD_POLL_HANDLE_INFO {
     Handle: HANDLE,
@@ -13,6 +14,7 @@ struct AFD_POLL_HANDLE_INFO {
     Status: NTSTATUS,
 }
 
+#[allow(non_snake_case)]
 #[repr(C)]
 struct AFD_POLL_INFO {
     Timeout: LARGE_INTEGER,
