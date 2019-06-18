@@ -16,4 +16,5 @@ features = [
   "ioapiset",
   "minwindef",
   "ntdef",
+  "winsock2",
 ]
