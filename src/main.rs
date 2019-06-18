@@ -1,5 +1,5 @@
 use winapi::um::minwinbase::OVERLAPPED;
-use ntapi::ntioapi::{IO_STATUS_BLOCK_u, NtDeviceIoControlFile, IO_STATUS_BLOCK, PIO_STATUS_BLOCK};
+use ntapi::ntioapi::{NtDeviceIoControlFile, IO_STATUS_BLOCK};
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use winapi::shared::minwindef::{DWORD, LPVOID, ULONG};
@@ -7,6 +7,7 @@ use winapi::shared::ntdef::{NTSTATUS, PVOID};
 use winapi::um::winnt::{HANDLE, LARGE_INTEGER};
 use winapi::um::winsock2::{WSAIoctl, SOCKET, SOCKET_ERROR, INVALID_SOCKET};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
+use winapi::shared::winerror::WSAEINPROGRESS;
 
 #[allow(non_snake_case)]
 #[repr(C)]
@@ -34,9 +35,10 @@ fn afd_poll(
 ) -> u32 {
     let mut piosb = overlapped.Internal as *mut _ as *mut IO_STATUS_BLOCK;
     (*piosb).u.Status = STATUS_PENDING;
+    let mut status = STATUS_PENDING;
 
     unsafe {
-        let status = NtDeviceIoControlFile(
+        status = NtDeviceIoControlFile(
             afd_helper_handle,
             overlapped.hEvent,
             None,

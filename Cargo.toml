@@ -18,4 +18,5 @@ features = [
   "ntdef",
   "winsock2",
   "ntstatus",
+  "winerror",
 ]
