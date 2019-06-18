@@ -34,11 +34,11 @@ fn afd_poll(
     overlapped: &mut OVERLAPPED,
 ) -> u32 {
     let mut piosb = overlapped.Internal as *mut IO_STATUS_BLOCK;
-    (*piosb).u.Status = STATUS_PENDING;
-    let mut status = STATUS_PENDING;
 
-    unsafe {
-        status = NtDeviceIoControlFile(
+    let status = unsafe {
+        (*piosb).u.Status = STATUS_PENDING;
+
+        NtDeviceIoControlFile(
             afd_helper_handle,
             overlapped.hEvent,
             None,
