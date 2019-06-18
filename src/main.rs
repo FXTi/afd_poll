@@ -73,7 +73,7 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
             0 as *mut _,
             None,
         ) {
-            INVALID_SOCKET
+            return INVALID_SOCKET;
         }
     }
 
