@@ -1,5 +1,5 @@
 [package]
-name = "afd_poll"
+name = "iocp-wrapper"
 version = "0.1.0"
 authors = ["FXTi <zjxiang1998@gmail.com>"]
 edition = "2018"
