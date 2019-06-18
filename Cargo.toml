@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 ntapi = "0.3.1"
-miow = "0.3.3"
+#miow = "0.3.3"
 
 [dependencies.winapi]
 version = "0.3.7"
