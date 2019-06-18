@@ -1,13 +1,13 @@
-use winapi::um::minwinbase::OVERLAPPED;
 use ntapi::ntioapi::{NtDeviceIoControlFile, IO_STATUS_BLOCK};
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use winapi::shared::minwindef::{DWORD, LPVOID, ULONG};
 use winapi::shared::ntdef::{NTSTATUS, PVOID};
-use winapi::um::winnt::{HANDLE, LARGE_INTEGER};
-use winapi::um::winsock2::{WSAIoctl, SOCKET, SOCKET_ERROR, INVALID_SOCKET};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
+use winapi::um::minwinbase::OVERLAPPED;
+use winapi::um::winnt::{HANDLE, LARGE_INTEGER};
+use winapi::um::winsock2::{WSAIoctl, INVALID_SOCKET, SOCKET, SOCKET_ERROR};
 
 #[allow(non_snake_case)]
 #[repr(C)]
@@ -66,17 +66,19 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
     let mut bytes: DWORD = 0;
 
     unsafe {
-        if SOCKET_ERROR == WSAIoctl(
-            *socket,
-            SIO_BASE_HANDLE,
-            0 as *mut _,
-            0,
-            &mut base_socket as *mut _ as LPVOID,
-            size_of::<SOCKET>() as DWORD,
-            &mut bytes as *mut _,
-            0 as *mut _,
-            None,
-        ) {
+        if SOCKET_ERROR
+            == WSAIoctl(
+                *socket,
+                SIO_BASE_HANDLE,
+                0 as *mut _,
+                0,
+                &mut base_socket as *mut _ as LPVOID,
+                size_of::<SOCKET>() as DWORD,
+                &mut bytes as *mut _,
+                0 as *mut _,
+                None,
+            )
+        {
             return INVALID_SOCKET;
         }
     }
