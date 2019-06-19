@@ -95,16 +95,16 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
 
 static afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
 
-static afd__helper_name: UNICODE_STRING = UNICODE_STRING {
+static mut afd__helper_name: UNICODE_STRING = UNICODE_STRING {
     Length: afd___helper_name.len() as USHORT,
     MaximumLength: afd___helper_name.len() as USHORT,
     Buffer: afd___helper_name.as_mut_ptr() as *mut _,
 };
 
-static afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
+static mut afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
     Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
     RootDirectory: 0 as *mut _,
-    ObjectName: afd___helper_name.as_mut_ptr() as *mut _,
+    ObjectName: &mut afd___helper_name as *mut _,
     Attributes: 0,
     SecurityDescriptor: 0 as *mut _,
     SecurityQualityOfService: 0 as *mut _,
@@ -137,14 +137,20 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         return -1;
     }
 
-    if (0 as *mut _ == CreateIoCompletionPort(afd_helper_handle, *iocp, 0, 0))
-        || (0 == SetFileCompletionNotificationModes(afd_helper_handle, FILE_SKIP_SET_EVENT_ON_HANDLE))
-    {
-        CloseHandle(afd_helper_handle);
-        -1
-    } else {
-        *afd_helper_handle_out = afd_helper_handle;
-        0
+    unsafe {
+        if (0 as *mut _ == CreateIoCompletionPort(afd_helper_handle, *iocp, 0, 0))
+            || (0
+                == SetFileCompletionNotificationModes(
+                    afd_helper_handle,
+                    FILE_SKIP_SET_EVENT_ON_HANDLE,
+                ))
+        {
+            CloseHandle(afd_helper_handle);
+            -1
+        } else {
+            *afd_helper_handle_out = afd_helper_handle;
+            0
+        }
     }
 }
 
