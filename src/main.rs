@@ -137,13 +137,13 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         return -1;
     }
 
-    if 0 == CreateIoCompletionPort(afd_helper_handle, iocp, 0, 0)
-        || !SetFileCompletionNotificationModes(afd_helper_handle, FILE_SKIP_SET_EVENT_ON_HANDLE)
+    if (0 as *mut _ == CreateIoCompletionPort(afd_helper_handle, *iocp, 0, 0))
+        || (!SetFileCompletionNotificationModes(afd_helper_handle, FILE_SKIP_SET_EVENT_ON_HANDLE))
     {
         CloseHandle(afd_helper_handle);
         -1
     } else {
-        afd_helper_handle_out = afd_helper_handle;
+        *afd_helper_handle_out = afd_helper_handle;
         0
     }
 }
