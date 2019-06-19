@@ -138,7 +138,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
     }
 
     if (0 as *mut _ == CreateIoCompletionPort(afd_helper_handle, *iocp, 0, 0))
-        || (false == SetFileCompletionNotificationModes(afd_helper_handle, FILE_SKIP_SET_EVENT_ON_HANDLE))
+        || (0 == SetFileCompletionNotificationModes(afd_helper_handle, FILE_SKIP_SET_EVENT_ON_HANDLE))
     {
         CloseHandle(afd_helper_handle);
         -1
