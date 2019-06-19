@@ -7,8 +7,12 @@ use winapi::shared::minwindef::{DWORD, LPVOID, ULONG, USHORT};
 use winapi::shared::ntdef::{NTSTATUS, OBJECT_ATTRIBUTES, PHANDLE, PVOID};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
+use winapi::um::handleapi::CloseHandle;
+use winapi::um::ioapiset::CreateIoCompletionPort;
 use winapi::um::minwinbase::OVERLAPPED;
 use winapi::um::subauth::UNICODE_STRING;
+use winapi::um::winbase::SetFileCompletionNotificationModes;
+use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
 use winapi::um::winsock2::{WSAIoctl, INVALID_SOCKET, SOCKET, SOCKET_ERROR};
 
@@ -133,7 +137,15 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         return -1;
     }
 
-    0
+    if 0 == CreateIoCompletionPort(afd_helper_handle, iocp, 0, 0)
+        || !SetFileCompletionNotificationModes(afd_helper_handle, FILE_SKIP_SET_EVENT_ON_HANDLE)
+    {
+        CloseHandle(afd_helper_handle);
+        -1
+    } else {
+        afd_helper_handle_out = afd_helper_handle;
+        0
+    }
 }
 
 fn main() {
