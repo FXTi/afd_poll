@@ -1,4 +1,4 @@
-use ntapi::ntioapi::{NtDeviceIoControlFile, IO_STATUS_BLOCK};
+use ntapi::ntioapi::{NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK};
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use winapi::shared::minwindef::{DWORD, LPVOID, ULONG};
@@ -6,7 +6,8 @@ use winapi::shared::ntdef::{NTSTATUS, PVOID};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::um::minwinbase::OVERLAPPED;
-use winapi::um::winnt::{HANDLE, LARGE_INTEGER};
+use winapi::um::subauth::UNICODE_STRING;
+use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
 use winapi::um::winsock2::{WSAIoctl, INVALID_SOCKET, SOCKET, SOCKET_ERROR};
 
 #[allow(non_snake_case)]
@@ -84,6 +85,53 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
     }
 
     base_socket
+}
+
+static afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
+
+static afd__helper_name: UNICODE_STRING = UNICODE_STRING {
+    Length: afd___helper_name.len(),
+    MaximumLength: afd___helper_name.len(),
+    Buffer: afd___helper_name.as_ptr(),
+};
+
+static afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
+    Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
+    RootDirectory: 0,
+    ObjectName: afd___helper_name.as_mut_ptr(),
+    Attributes: 0,
+    SecurityDescriptor: 0 as *mut _,
+    SecurityQualityOfService: 0 as *mut _,
+};
+
+fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
+    let mut afd_helper_handle: HANDLE = 0;
+    let mut iosb = IO_STATUS_BLOCK {
+        u: IO_STATUS_BLOCK_u { Status: 0 },
+        Information: 0,
+    };
+
+    let status = unsafe {
+        NtCreateFile(
+            &mut *afd_helper_handle,
+            SYNCHRONIZE,
+            afd__helper_attributes.as_mut_ptr(),
+            &mut *iosb,
+            0,
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            FILE_OPEN,
+            0,
+            0 as *mut _,
+            0,
+        )
+    };
+
+    if status == STATUS_SUCCESS {
+        return -1;
+    }
+
+    0
 }
 
 fn main() {
