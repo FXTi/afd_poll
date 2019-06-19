@@ -104,7 +104,7 @@ static mut afd__helper_name: UNICODE_STRING = UNICODE_STRING {
 static mut afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
     Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
     RootDirectory: 0 as *mut _,
-    ObjectName: &mut afd___helper_name as *mut _,
+    ObjectName: &mut afd__helper_name as *mut _,
     Attributes: 0,
     SecurityDescriptor: 0 as *mut _,
     SecurityQualityOfService: 0 as *mut _,
