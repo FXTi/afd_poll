@@ -93,6 +93,7 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
     base_socket
 }
 
+#[allow(non_snake_case)]
 fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
     let afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
 
