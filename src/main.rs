@@ -4,13 +4,13 @@ use ntapi::ntioapi::{
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use winapi::shared::minwindef::{DWORD, LPVOID, ULONG, USHORT};
+use winapi::shared::ntdef::UNICODE_STRING;
 use winapi::shared::ntdef::{NTSTATUS, OBJECT_ATTRIBUTES, PHANDLE, PVOID};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::ioapiset::CreateIoCompletionPort;
 use winapi::um::minwinbase::OVERLAPPED;
-use winapi::shared::ntdef::UNICODE_STRING;
 use winapi::um::winbase::SetFileCompletionNotificationModes;
 use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
@@ -94,12 +94,12 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
 }
 
 fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
-    let afd___helper_name: &mut str = "\\Device\\Afd\\Wepoll";
+    let afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
 
     let mut afd__helper_name: UNICODE_STRING = UNICODE_STRING {
         Length: afd___helper_name.len() as USHORT,
         MaximumLength: afd___helper_name.len() as USHORT,
-        Buffer: afd___helper_name.as_mut_ptr() as *mut _,
+        Buffer: afd___helper_name.as_ptr() as *const _ as *mut _,
     };
     let mut afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
