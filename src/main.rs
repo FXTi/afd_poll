@@ -93,7 +93,7 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
     base_socket
 }
 
-static afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
+static mut afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
 
 static mut afd__helper_name: UNICODE_STRING = UNICODE_STRING {
     Length: afd___helper_name.len() as USHORT,
