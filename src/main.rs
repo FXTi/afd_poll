@@ -92,22 +92,22 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
 static afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
 
 static afd__helper_name: UNICODE_STRING = UNICODE_STRING {
-    Length: afd___helper_name.len(),
-    MaximumLength: afd___helper_name.len(),
-    Buffer: afd___helper_name.as_ptr(),
+    Length: afd___helper_name.len() as USHORT,
+    MaximumLength: afd___helper_name.len() as USHORT,
+    Buffer: afd___helper_name.as_mut_ptr(),
 };
 
 static afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
     Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
-    RootDirectory: 0,
-    ObjectName: afd___helper_name.as_mut_ptr(),
+    RootDirectory: 0 as *mut _,
+    ObjectName: afd___helper_name.as_mut_ptr() as *mut _,
     Attributes: 0,
     SecurityDescriptor: 0 as *mut _,
     SecurityQualityOfService: 0 as *mut _,
 };
 
 fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
-    let mut afd_helper_handle: HANDLE = 0 as *const _;
+    let mut afd_helper_handle: HANDLE = 0 as *mut _;
     let mut iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u { Status: 0 },
         Information: 0,
@@ -115,11 +115,11 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
 
     let status = unsafe {
         NtCreateFile(
-            &mut *afd_helper_handle,
+            &mut *afd_helper_handle as *mut _,
             SYNCHRONIZE,
-            afd__helper_attributes.as_mut_ptr(),
-            &mut *iosb as *mut _,
-            0,
+            &mut *afd__helper_attributes,
+            &mut *iosb,
+            0 as *mut _,
             0,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             FILE_OPEN,
