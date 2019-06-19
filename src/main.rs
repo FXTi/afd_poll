@@ -115,7 +115,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
 
     let status = unsafe {
         NtCreateFile(
-            &mut *afd_helper_handle as _,
+            &mut *afd_helper_handle as PHANDLE,
             SYNCHRONIZE,
             &mut *afd__helper_attributes as *mut _,
             &mut *iosb as *mut _,
