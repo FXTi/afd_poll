@@ -1,8 +1,10 @@
-use ntapi::ntioapi::{NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK};
+use ntapi::ntioapi::{
+    IO_STATUS_BLOCK_u, NtCreateFile, NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK,
+};
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use winapi::shared::minwindef::{DWORD, LPVOID, ULONG};
-use winapi::shared::ntdef::{NTSTATUS, PVOID};
+use winapi::shared::ntdef::{NTSTATUS, OBJECT_ATTRIBUTES, PVOID};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::um::minwinbase::OVERLAPPED;
@@ -105,7 +107,7 @@ static afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
 };
 
 fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
-    let mut afd_helper_handle: HANDLE = 0;
+    let mut afd_helper_handle: HANDLE = 0 as *const _;
     let mut iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u { Status: 0 },
         Information: 0,
@@ -116,7 +118,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
             &mut *afd_helper_handle,
             SYNCHRONIZE,
             afd__helper_attributes.as_mut_ptr(),
-            &mut *iosb,
+            &mut *iosb as *mut _,
             0,
             0,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
