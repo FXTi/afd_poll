@@ -3,7 +3,7 @@ use ntapi::ntioapi::{
 };
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
-use winapi::shared::minwindef::{DWORD, LPVOID, ULONG};
+use winapi::shared::minwindef::{DWORD, LPVOID, ULONG, USHORT};
 use winapi::shared::ntdef::{NTSTATUS, OBJECT_ATTRIBUTES, PVOID};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
@@ -94,7 +94,7 @@ static afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
 static afd__helper_name: UNICODE_STRING = UNICODE_STRING {
     Length: afd___helper_name.len() as USHORT,
     MaximumLength: afd___helper_name.len() as USHORT,
-    Buffer: afd___helper_name.as_mut_ptr(),
+    Buffer: afd___helper_name.as_mut_ptr() as *mut _,
 };
 
 static afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
@@ -115,10 +115,10 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
 
     let status = unsafe {
         NtCreateFile(
-            &mut *afd_helper_handle as *mut _,
+            &mut *afd_helper_handle as _,
             SYNCHRONIZE,
-            &mut *afd__helper_attributes,
-            &mut *iosb,
+            &mut *afd__helper_attributes as *mut _,
+            &mut *iosb as *mut _,
             0 as *mut _,
             0,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
