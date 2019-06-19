@@ -10,7 +10,7 @@ use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::ioapiset::CreateIoCompletionPort;
 use winapi::um::minwinbase::OVERLAPPED;
-use winapi::um::shared::ntdef::UNICODE_STRING;
+use winapi::shared::ntdef::UNICODE_STRING;
 use winapi::um::winbase::SetFileCompletionNotificationModes;
 use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
