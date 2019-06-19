@@ -95,22 +95,21 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
 
 static mut afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
 
-static mut afd__helper_name: UNICODE_STRING = UNICODE_STRING {
-    Length: afd___helper_name.len() as USHORT,
-    MaximumLength: afd___helper_name.len() as USHORT,
-    Buffer: afd___helper_name.as_mut_ptr() as *mut _,
-};
-
-static mut afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
-    Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
-    RootDirectory: 0 as *mut _,
-    ObjectName: &mut afd__helper_name as *mut _,
-    Attributes: 0,
-    SecurityDescriptor: 0 as *mut _,
-    SecurityQualityOfService: 0 as *mut _,
-};
-
 fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
+    let mut afd__helper_name: UNICODE_STRING = UNICODE_STRING {
+        Length: afd___helper_name.len() as USHORT,
+        MaximumLength: afd___helper_name.len() as USHORT,
+        Buffer: afd___helper_name.as_mut_ptr() as *mut _,
+    };
+    let mut afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
+        Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
+        RootDirectory: 0 as *mut _,
+        ObjectName: &mut afd__helper_name as *mut _,
+        Attributes: 0,
+        SecurityDescriptor: 0 as *mut _,
+        SecurityQualityOfService: 0 as *mut _,
+    };
+
     let mut afd_helper_handle: HANDLE = 0 as *mut _;
     let mut iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u { Status: 0 },
