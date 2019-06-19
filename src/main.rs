@@ -4,7 +4,7 @@ use ntapi::ntioapi::{
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use winapi::shared::minwindef::{DWORD, LPVOID, ULONG, USHORT};
-use winapi::shared::ntdef::{NTSTATUS, OBJECT_ATTRIBUTES, PVOID};
+use winapi::shared::ntdef::{NTSTATUS, OBJECT_ATTRIBUTES, PHANDLE, PVOID};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::um::minwinbase::OVERLAPPED;
