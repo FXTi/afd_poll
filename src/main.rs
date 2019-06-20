@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
+#![feature(proc_macro, proc_macro_non_items)]
+extern crate wchar;
 use ntapi::ntioapi::{
     IO_STATUS_BLOCK_u, NtCreateFile, NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK,
 };
@@ -122,12 +124,14 @@ unsafe impl Send for OBJECT_ATTRIBUTES {}
 unsafe impl Sync for OBJECT_ATTRIBUTES {}
 
 lazy_static! {
-    static ref afd___helper_name: &'static str = "\\Device\\Afd\\Wepoll";
+    static ref afd___helper_name: &'static [u16] = wch_c!("\\Device\\Afd\\Wepoll");
+    
     static ref afd__helper_name: UNICODE_STRING = UNICODE_STRING {
-        Length: afd___helper_name.len() as USHORT,
-        MaximumLength: afd___helper_name.len() as USHORT,
+        Length: (size_of::<afd___helper_name>() - size_of::<u16>()) as USHORT,
+        MaximumLength: size_of::<afd___helper_name>() as USHORT,
         Buffer: afd___helper_name.as_ptr() as *const _ as *mut _,
     };
+
     static ref afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
         RootDirectory: 0 as *mut _,
