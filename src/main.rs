@@ -7,7 +7,8 @@ use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use winapi::shared::minwindef::{DWORD, LPVOID, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
-use winapi::shared::ntdef::{NTSTATUS, OBJECT_ATTRIBUTES, PHANDLE, PVOID, PWCH};
+//use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
+use winapi::shared::ntdef::{NTSTATUS, PHANDLE, PVOID, PWCH, PUNICODE_STRING};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::um::handleapi::CloseHandle;
@@ -105,6 +106,20 @@ struct UNICODE_STRING {
 
 unsafe impl Send for UNICODE_STRING {}
 unsafe impl Sync for UNICODE_STRING {}
+
+#[allow(non_snake_case)]
+#[repr(C)]
+struct OBJECT_ATTRIBUTES {
+    Length: ULONG,
+    RootDirectory: HANDLE,
+    ObjectName: PUNICODE_STRING,
+    Attributes: ULONG,
+    SecurityDescriptor: PVOID,
+    SecurityQualityOfService: PVOID,
+}
+
+unsafe impl Send for OBJECT_ATTRIBUTES {}
+unsafe impl Sync for OBJECT_ATTRIBUTES {}
 
 lazy_static! {
     static ref afd___helper_name: &'static str = "\\Device\\Afd\\Wepoll";
