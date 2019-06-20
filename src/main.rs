@@ -104,6 +104,7 @@ struct UNICODE_STRING {
 }
 
 unsafe impl Send for UNICODE_STRING {}
+unsafe impl Sync for UNICODE_STRING {}
 
 lazy_static! {
     static ref afd___helper_name: &'static str = "\\Device\\Afd\\Wepoll";
