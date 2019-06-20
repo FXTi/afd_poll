@@ -21,4 +21,5 @@ features = [
   "winsock2",
   "ntstatus",
   "winerror",
+  "ws2def",
 ]

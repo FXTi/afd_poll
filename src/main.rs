@@ -2,25 +2,28 @@
 
 #[macro_use]
 extern crate lazy_static;
-use wchar::wch_c;
 use ntapi::ntioapi::{
     IO_STATUS_BLOCK_u, NtCreateFile, NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK,
 };
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
-use winapi::shared::minwindef::{DWORD, LPVOID, ULONG, USHORT};
+use wchar::wch_c;
+use winapi::shared::minwindef::{DWORD, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
-use winapi::shared::ntdef::{NTSTATUS, PHANDLE, PVOID, PWCH, PUNICODE_STRING};
+use winapi::shared::ntdef::{NTSTATUS, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
-use winapi::um::handleapi::CloseHandle;
+use winapi::shared::ws2def::{AF_INET, IPPROTO_TCP, SOCK_STREAM};
+use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
 use winapi::um::ioapiset::CreateIoCompletionPort;
 use winapi::um::minwinbase::OVERLAPPED;
 use winapi::um::winbase::SetFileCompletionNotificationModes;
 use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
-use winapi::um::winsock2::{WSAIoctl, INVALID_SOCKET, SOCKET, SOCKET_ERROR};
+use winapi::um::winsock2::{
+    socket, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
+};
 
 #[allow(non_snake_case)]
 #[repr(C)]
@@ -126,13 +129,11 @@ unsafe impl Sync for OBJECT_ATTRIBUTES {}
 
 lazy_static! {
     static ref afd___helper_name: &'static [u16] = wch_c!("\\Device\\Afd\\Wepoll");
-    
     static ref afd__helper_name: UNICODE_STRING = UNICODE_STRING {
         Length: (size_of::<afd___helper_name>() - size_of::<u16>()) as USHORT,
         MaximumLength: size_of::<afd___helper_name>() as USHORT,
         Buffer: afd___helper_name.as_ptr() as *const _ as *mut _,
     };
-
     static ref afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
         RootDirectory: 0 as *mut _,
@@ -188,6 +189,39 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
     }
 }
 
+fn port__create_iocp() -> HANDLE {
+    //just return the result, error handling left for future
+    unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0 as *mut _, 0, 0) };
+}
+
+fn ws_global_init() -> i32 {
+    let mut wsa_data: WSADATA = Default::default();
+
+    let r = unsafe { WSAStartup(MAKEWORD(2, 2), &mut wsa_data as *mut _) };
+
+    match r {
+        0 => 0,
+        _ => -1,
+    }
+}
+
 fn main() {
-    println!("Hello, world!");
+    let mut iocp: HANDLE = port__create_iocp();
+    assert!(iocp != 0 as *mut _);
+
+    let mut afd_helper_handle: HANDLE = 0 as *mut _;
+    afd_create_helper_handle(&mut iocp, &mut afd_helper_handle);
+    println!("{:?}", afd_helper_handle);
+
+    ws_global_init();
+    println!("WS init complete.");
+
+    let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
+    let base_sock = ws_get_base_socket(&sock);
+
+    afd_poll(
+        afd_helper_handle,
+        poll_info: &mut AFD_POLL_INFO,
+        overlapped: &mut OVERLAPPED,
+    );
 }
