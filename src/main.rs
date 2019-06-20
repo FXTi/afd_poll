@@ -95,6 +95,8 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
     base_socket
 }
 
+unsafe impl Send for UNICODE_STRING {}
+
 lazy_static! {
     static ref afd___helper_name: &'static str = "\\Device\\Afd\\Wepoll";
 
