@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate lazy_static;
 use ntapi::ntioapi::{
     IO_STATUS_BLOCK_u, NtCreateFile, NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK,
 };
@@ -93,17 +95,16 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
     base_socket
 }
 
-#[allow(non_snake_case)]
-fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
-    //worry about this string
-    let afd___helper_name: &str = "\\Device\\Afd\\Wepoll";
+lazy_static! {
+    static ref afd___helper_name: &'static str = "\\Device\\Afd\\Wepoll";
 
-    let mut afd__helper_name: UNICODE_STRING = UNICODE_STRING {
+    static ref afd__helper_name: UNICODE_STRING = UNICODE_STRING {
         Length: afd___helper_name.len() as USHORT,
         MaximumLength: afd___helper_name.len() as USHORT,
         Buffer: afd___helper_name.as_ptr() as *const _ as *mut _,
     };
-    let mut afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
+
+    static ref afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
         RootDirectory: 0 as *mut _,
         ObjectName: &mut afd__helper_name as *mut _,
@@ -111,7 +112,10 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         SecurityDescriptor: 0 as *mut _,
         SecurityQualityOfService: 0 as *mut _,
     };
+}
 
+#[allow(non_snake_case)]
+fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
     let mut afd_helper_handle: HANDLE = 0 as *mut _;
     let mut iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u { Status: 0 },
