@@ -191,11 +191,13 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
 
 fn port__create_iocp() -> HANDLE {
     //just return the result, error handling left for future
-    unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0 as *mut _, 0, 0) };
+    let iocp = unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0 as *mut _, 0, 0) };
+
+    iocp
 }
 
 fn ws_global_init() -> i32 {
-    let mut wsa_data: WSADATA = Default::default();
+    let mut wsa_data = WSADATA::default();
 
     let r = unsafe { WSAStartup(MAKEWORD(2, 2), &mut wsa_data as *mut _) };
 
@@ -204,6 +206,15 @@ fn ws_global_init() -> i32 {
         _ => -1,
     }
 }
+
+const AFD_POLL_RECEIVE: ULONG = 0x0001;
+const AFD_POLL_RECEIVE_EXPEDITED: ULONG = 0x0002;
+const AFD_POLL_SEND: ULONG = 0x0004;
+const AFD_POLL_DISCONNECT: ULONG = 0x0008;
+const AFD_POLL_ABORT: ULONG = 0x0010;
+const AFD_POLL_LOCAL_CLOSE: ULONG = 0x0020;
+const AFD_POLL_ACCEPT: ULONG = 0x0080;
+const AFD_POLL_CONNECT_FAIL: ULONG = 0x0100;
 
 fn main() {
     let mut iocp: HANDLE = port__create_iocp();
@@ -217,11 +228,23 @@ fn main() {
     println!("WS init complete.");
 
     let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
-    let base_sock = ws_get_base_socket(&sock);
+    let mut base_sock = ws_get_base_socket(&sock);
 
-    afd_poll(
-        afd_helper_handle,
-        poll_info: &mut AFD_POLL_INFO,
-        overlapped: &mut OVERLAPPED,
-    );
+    let mut poll_info = AFD_POLL_INFO {
+        Timeout: LARGE_INTEGER::default(),
+        NumberOfHandles: 1,
+        Exclusive: 0,
+        Handles: [AFD_POLL_HANDLE_INFO {
+            Handle: &mut base_sock as *mut _ as HANDLE,
+            Events: AFD_POLL_RECEIVE | AFD_POLL_ACCEPT,
+            Status: 0,
+        }],
+    };
+    let mut overlapped = OVERLAPPED::default();
+    unsafe { *poll_info.Timeout.QuadPart_mut() = i64::max_value() };
+
+    let r = afd_poll(afd_helper_handle, &mut poll_info, &mut overlapped);
+    println!("{:?}", r);
+
+    //GetQueuedCompletionStatusEx
 }

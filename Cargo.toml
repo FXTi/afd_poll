@@ -22,4 +22,5 @@ features = [
   "ntstatus",
   "winerror",
   "ws2def",
+  "impl-default",
 ]
