@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
-#![feature(proc_macro, proc_macro_non_items)]
-extern crate wchar;
+#![feature(proc_macro_hygiene)]
+use wchar::wch_c;
 use ntapi::ntioapi::{
     IO_STATUS_BLOCK_u, NtCreateFile, NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK,
 };
