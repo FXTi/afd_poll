@@ -131,7 +131,7 @@ lazy_static! {
     static ref afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
         RootDirectory: 0 as *mut _,
-        ObjectName: &mut afd__helper_name as *mut _,
+        ObjectName: &afd__helper_name as *const _ as *mut _,
         Attributes: 0,
         SecurityDescriptor: 0 as *mut _,
         SecurityQualityOfService: 0 as *mut _,
@@ -150,7 +150,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         NtCreateFile(
             &mut afd_helper_handle as PHANDLE,
             SYNCHRONIZE,
-            &mut afd__helper_attributes as *mut _,
+            &afd__helper_attributes as *const _ as *mut _,
             &mut iosb as *mut _,
             0 as *mut _,
             0,
