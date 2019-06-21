@@ -6,7 +6,7 @@ use ntapi::ntioapi::{
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use widestring::U16CString;
-use winapi::shared::minwindef::{DWORD, LPVOID, MAKEWORD, ULONG, USHORT};
+use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
 use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
@@ -14,10 +14,10 @@ use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::shared::ws2def::{AF_INET, IPPROTO_TCP, SOCK_STREAM};
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
-use winapi::um::ioapiset::CreateIoCompletionPort;
-use winapi::um::minwinbase::OVERLAPPED;
-use winapi::um::winbase::SetFileCompletionNotificationModes;
+use winapi::um::ioapiset::{CreateIoCompletionPort, GetQueuedCompletionStatusEx};
+use winapi::um::minwinbase::{OVERLAPPED, OVERLAPPED_ENTRY};
 use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
+use winapi::um::winbase::{SetFileCompletionNotificationModes, INFINITE};
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
 use winapi::um::winsock2::{
     socket, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
@@ -246,5 +246,35 @@ fn main() {
     let r = afd_poll(afd_helper_handle, &mut poll_info, &mut overlapped);
     println!("{:?}", r);
 
-    //GetQueuedCompletionStatusEx
+    let mut completion_count: DWORD = 0;
+    let mut iocp_events: [OVERLAPPED_ENTRY; 256] = [OVERLAPPED_ENTRY::default(); 256];
+    let r = unsafe {
+        GetQueuedCompletionStatusEx(
+            iocp,
+            iocp_events.as_mut_ptr(),
+            iocp_events.len() as ULONG,
+            &mut completion_count as *mut _,
+            INFINITE,
+            FALSE,
+        )
+    };
+
+    println!("Return value: {:?}", r);
+    println!("completion_count: {:?}", completion_count);
+    println!("iocp_events: ");
+    for ele in iocp_events.iter() {
+        println!("  Event: ");
+        println!("    lpCompletionKey: {:?}", ele.lpCompletionKey);
+        println!("    lpOverlapped: {:?}", ele.lpOverlapped);
+        /* ignore it for now
+        if NULL as _ != ele.lpOverlapped {
+            println!("      *lpOverlapped: {:?}", *ele.lpOverlapped);
+        }
+        */
+        println!("    Internal: {:?}", ele.Internal);
+        println!(
+            "    dwNumberOfBytesTransferred: {:?}",
+            ele.dwNumberOfBytesTransferred
+        );
+    }
 }
