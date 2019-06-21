@@ -47,7 +47,7 @@ fn afd_poll(
     poll_info: &mut AFD_POLL_INFO,
     overlapped: &mut OVERLAPPED,
 ) -> u32 {
-    let mut piosb = overlapped.Internal as *mut IO_STATUS_BLOCK;
+    let mut piosb = &mut overlapped.Internal as *mut _ as *mut IO_STATUS_BLOCK;
 
     let status = unsafe {
         (*piosb).u.Status = STATUS_PENDING;
@@ -241,6 +241,7 @@ fn main() {
     };
     let mut overlapped = OVERLAPPED::default();
     unsafe { *poll_info.Timeout.QuadPart_mut() = i64::max_value() };
+    //memset(&sock_state->overlapped, 0, sizeof sock_state->overlapped);
 
     let r = afd_poll(afd_helper_handle, &mut poll_info, &mut overlapped);
     println!("{:?}", r);
