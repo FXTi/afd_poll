@@ -1,0 +1,39 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+pool:
+  vmImage: "vs2017-win2016"
+
+variables:
+  RUST_BACKTRACE: full
+
+steps:
+- script: |
+    curl -sSf -o rustup-init.exe https://win.rustup.rs
+    rustup-init.exe -y --default-toolchain %RUSTUP_TOOLCHAIN%
+    set PATH=%PATH%;%USERPROFILE%\.cargo\bin
+    echo "##vso[task.setvariable variable=PATH;]%PATH%;%USERPROFILE%\.cargo\bin"
+  env:
+    RUSTUP_TOOLCHAIN: "nightly-2019-04-22"
+  displayName: "Install rust (windows)"
+
+# All platforms.
+- script: |
+      rustc -Vv
+      cargo -V
+  displayName: Query rust and cargo versions
+
+- script: cargo check
+  displayName: cargo check
+  env:
+    CI: 'True'
+
+- script: cargo check --no-default-features
+  displayName: cargo check --no-default-features
+  env:
+    CI: 'True'
