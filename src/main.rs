@@ -1,5 +1,3 @@
-#![feature(proc_macro_hygiene)]
-
 #[macro_use]
 extern crate lazy_static;
 use ntapi::ntioapi::{
@@ -7,7 +5,7 @@ use ntapi::ntioapi::{
 };
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
-use wchar::wch_c;
+use widestring::U16CString;
 use winapi::shared::minwindef::{DWORD, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
@@ -128,7 +126,8 @@ unsafe impl Send for OBJECT_ATTRIBUTES {}
 unsafe impl Sync for OBJECT_ATTRIBUTES {}
 
 lazy_static! {
-    static ref afd___helper_name: &'static [u16] = wch_c!("\\Device\\Afd\\Wepoll");
+    static ref afd___helper_name: U16CString =
+        U16CString::from_str("\\Device\\Afd\\Wepoll").unwrap();
     static ref afd__helper_name: UNICODE_STRING = UNICODE_STRING {
         Length: (size_of::<afd___helper_name>() - size_of::<u16>()) as USHORT,
         MaximumLength: size_of::<afd___helper_name>() as USHORT,
