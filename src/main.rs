@@ -9,7 +9,7 @@ use widestring::U16CString;
 use winapi::shared::minwindef::{DWORD, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
-use winapi::shared::ntdef::{NTSTATUS, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
+use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::shared::ws2def::{AF_INET, IPPROTO_TCP, SOCK_STREAM};
@@ -84,12 +84,12 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
             == WSAIoctl(
                 *socket,
                 SIO_BASE_HANDLE,
-                0 as *mut _,
+                NULL,
                 0,
                 &mut base_socket as *mut _ as LPVOID,
                 size_of::<SOCKET>() as DWORD,
                 &mut bytes as *mut _,
-                0 as *mut _,
+                NULL as _,
                 None,
             )
         {
@@ -135,17 +135,17 @@ lazy_static! {
     };
     static ref afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
-        RootDirectory: 0 as *mut _,
+        RootDirectory: NULL,
         ObjectName: &afd__helper_name as *const _ as *mut _,
         Attributes: 0,
-        SecurityDescriptor: 0 as *mut _,
-        SecurityQualityOfService: 0 as *mut _,
+        SecurityDescriptor: NULL,
+        SecurityQualityOfService: NULL,
     };
 }
 
 #[allow(non_snake_case)]
 fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
-    let mut afd_helper_handle: HANDLE = 0 as *mut _;
+    let mut afd_helper_handle: HANDLE = NULL;
     let mut iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u { Status: 0 },
         Information: 0,
@@ -157,12 +157,12 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
             SYNCHRONIZE,
             &afd__helper_attributes as *const _ as *mut _,
             &mut iosb as *mut _,
-            0 as *mut _,
+            NULL as _,
             0,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             FILE_OPEN,
             0,
-            0 as *mut _,
+            NULL,
             0,
         )
     };
@@ -172,7 +172,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
     }
 
     unsafe {
-        if (0 as *mut _ == CreateIoCompletionPort(afd_helper_handle, *iocp, 0, 0))
+        if (NULL == CreateIoCompletionPort(afd_helper_handle, *iocp, 0, 0))
             || (0
                 == SetFileCompletionNotificationModes(
                     afd_helper_handle,
@@ -190,7 +190,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
 
 fn port__create_iocp() -> HANDLE {
     //just return the result, error handling left for future
-    let iocp = unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0 as *mut _, 0, 0) };
+    let iocp = unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0) };
 
     iocp
 }
@@ -217,9 +217,9 @@ const AFD_POLL_CONNECT_FAIL: ULONG = 0x0100;
 
 fn main() {
     let mut iocp: HANDLE = port__create_iocp();
-    assert!(iocp != 0 as *mut _);
+    assert!(iocp != NULL);
 
-    let mut afd_helper_handle: HANDLE = 0 as *mut _;
+    let mut afd_helper_handle: HANDLE = NULL;
     afd_create_helper_handle(&mut iocp, &mut afd_helper_handle);
     println!("{:?}", afd_helper_handle);
 
