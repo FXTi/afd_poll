@@ -262,7 +262,7 @@ fn main() {
     println!("Return value: {:?}", r);
     println!("completion_count: {:?}", completion_count);
     println!("iocp_events: ");
-    for ele in iocp_events.iter() {
+    for ele in iocp_events[0..completion_count as usize].iter() {
         println!("  Event: ");
         println!("    lpCompletionKey: {:?}", ele.lpCompletionKey);
         println!("    lpOverlapped: {:?}", ele.lpOverlapped);
