@@ -215,6 +215,72 @@ const AFD_POLL_LOCAL_CLOSE: ULONG = 0x0020;
 const AFD_POLL_ACCEPT: ULONG = 0x0080;
 const AFD_POLL_CONNECT_FAIL: ULONG = 0x0100;
 
+const EPOLLIN: u32 = 0b1;
+const EPOLLPRI: u32 = 0b10;
+const EPOLLOUT: u32 = 0b100;
+const EPOLLERR: u32 = 0b1000;
+const EPOLLHUP: u32 = 0b10000;
+const EPOLLRDNORM: u32 = 0b1000000;
+const EPOLLRDBAND: u32 = 0b10000000;
+const EPOLLWRNORM: u32 = 0b100000000;
+const EPOLLWRBAND: u32 = 0b1000000000;
+const EPOLLMSG: u32 = 0b10000000000;
+const EPOLLRDHUP: u32 = 0b10000000000000;
+const EPOLLONESHOT: u32 = 0b10000000000000000000000000000000;
+
+fn sock_epoll_events_to_afd_events(epoll_events: u32) -> DWORD {
+    /* Always monitor for AFD_POLL_LOCAL_CLOSE, which is triggered when the
+     * socket is closed with closesocket() or CloseHandle(). */
+    let mut afd_events = AFD_POLL_LOCAL_CLOSE;
+
+    if 0 != (epoll_events & (EPOLLIN | EPOLLRDNORM)) {
+        afd_events |= AFD_POLL_RECEIVE | AFD_POLL_ACCEPT;
+    }
+    if 0 != (epoll_events & (EPOLLPRI | EPOLLRDBAND)) {
+        afd_events |= AFD_POLL_RECEIVE_EXPEDITED;
+    }
+    if 0 != (epoll_events & (EPOLLOUT | EPOLLWRNORM | EPOLLWRBAND)) {
+        afd_events |= AFD_POLL_SEND;
+    }
+    if 0 != (epoll_events & (EPOLLIN | EPOLLRDNORM | EPOLLRDHUP)) {
+        afd_events |= AFD_POLL_DISCONNECT;
+    }
+    if 0 != (epoll_events & EPOLLHUP) {
+        afd_events |= AFD_POLL_ABORT;
+    }
+    if 0 != (epoll_events & EPOLLERR) {
+        afd_events |= AFD_POLL_CONNECT_FAIL;
+    }
+
+    afd_events
+}
+
+fn sock_afd_events_to_epoll_events(afd_events: &DWORD) -> u32 {
+    let mut epoll_events: u32 = 0;
+
+    if 0 != (*afd_events & (AFD_POLL_RECEIVE | AFD_POLL_ACCEPT)) {
+        epoll_events |= EPOLLIN | EPOLLRDNORM;
+    }
+    if 0 != (*afd_events & AFD_POLL_RECEIVE_EXPEDITED) {
+        epoll_events |= EPOLLPRI | EPOLLRDBAND;
+    }
+    if 0 != (*afd_events & AFD_POLL_SEND) {
+        epoll_events |= EPOLLOUT | EPOLLWRNORM | EPOLLWRBAND;
+    }
+    if 0 != (*afd_events & AFD_POLL_DISCONNECT) {
+        epoll_events |= EPOLLIN | EPOLLRDNORM | EPOLLRDHUP;
+    }
+    if 0 != (*afd_events & AFD_POLL_ABORT) {
+        epoll_events |= EPOLLHUP;
+    }
+    if 0 != (*afd_events & AFD_POLL_CONNECT_FAIL) {
+        /* Linux reports all these events after connect() has failed. */
+        epoll_events |= EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDNORM | EPOLLWRNORM | EPOLLRDHUP;
+    }
+
+    epoll_events
+}
+
 fn main() {
     let mut iocp: HANDLE = port__create_iocp();
     assert!(iocp != NULL);
