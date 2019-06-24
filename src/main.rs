@@ -20,7 +20,7 @@ use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
 use winapi::um::winbase::{SetFileCompletionNotificationModes, INFINITE};
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
 use winapi::um::winsock2::{
-    socket, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
+    socket, WSACleanup, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
 };
 
 #[allow(non_snake_case)]
@@ -342,5 +342,10 @@ fn main() {
             "    dwNumberOfBytesTransferred: {:?}",
             ele.dwNumberOfBytesTransferred
         );
+    }
+
+    //WSACleanup is used to terminate the use of the WS2_32 DLL.
+    unsafe {
+        WSACleanup();
     }
 }
