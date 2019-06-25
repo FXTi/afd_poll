@@ -293,14 +293,14 @@ fn main() {
     println!("WS init complete.");
 
     let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
-    let mut base_sock = ws_get_base_socket(&sock);
+    let base_sock = ws_get_base_socket(&sock);
 
     let mut poll_info = AFD_POLL_INFO {
         Timeout: LARGE_INTEGER::default(),
         NumberOfHandles: 1,
         Exclusive: 0,
         Handles: [AFD_POLL_HANDLE_INFO {
-            Handle: &mut base_sock as *mut _ as HANDLE,
+            Handle: base_sock as HANDLE,
             Events: AFD_POLL_RECEIVE | AFD_POLL_ACCEPT,
             Status: 0,
         }],
@@ -342,10 +342,5 @@ fn main() {
             "    dwNumberOfBytesTransferred: {:?}",
             ele.dwNumberOfBytesTransferred
         );
-    }
-
-    //WSACleanup is used to terminate the use of the WS2_32 DLL.
-    unsafe {
-        WSACleanup();
     }
 }
