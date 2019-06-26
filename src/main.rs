@@ -297,7 +297,8 @@ fn main() {
     //need to set events
     //let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
     let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
-    let sock = listener.as_raw_socket() as SOCKET;
+    let (sock, _) = listener.accept().unwrap();
+    let sock = sock.as_raw_socket() as SOCKET;
     let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN | EPOLLOUT;
 
     //port__ctl_add() start
