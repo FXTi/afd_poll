@@ -282,18 +282,26 @@ fn sock_afd_events_to_epoll_events(afd_events: &DWORD) -> u32 {
 }
 
 fn main() {
+    //epoll_create() start
+    ws_global_init();
+    println!("WS init complete.");
+
     let mut iocp: HANDLE = port__create_iocp();
     assert!(iocp != NULL);
+    //epoll_create() end
+
+    //create test socket
+    //Need more changes
+    //need to set events
+    let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
+    let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN;
+
+    //port__ctl_add() start
+    let base_sock = ws_get_base_socket(&sock);
 
     let mut afd_helper_handle: HANDLE = NULL;
     afd_create_helper_handle(&mut iocp, &mut afd_helper_handle);
     println!("{:?}", afd_helper_handle);
-
-    ws_global_init();
-    println!("WS init complete.");
-
-    let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
-    let base_sock = ws_get_base_socket(&sock);
 
     let mut poll_info = AFD_POLL_INFO {
         Timeout: LARGE_INTEGER::default(),
@@ -301,7 +309,7 @@ fn main() {
         Exclusive: 0,
         Handles: [AFD_POLL_HANDLE_INFO {
             Handle: base_sock as HANDLE,
-            Events: AFD_POLL_RECEIVE | AFD_POLL_ACCEPT,
+            Events: sock_epoll_events_to_afd_events(socket_event),
             Status: 0,
         }],
     };
@@ -311,7 +319,9 @@ fn main() {
 
     let r = afd_poll(afd_helper_handle, &mut poll_info, &mut overlapped);
     println!("{:?}", r);
+    //port__ctl_add() end
 
+    //epoll_wait start
     let mut completion_count: DWORD = 0;
     let mut iocp_events: [OVERLAPPED_ENTRY; 256] = [OVERLAPPED_ENTRY::default(); 256];
     let r = unsafe {
@@ -320,10 +330,13 @@ fn main() {
             iocp_events.as_mut_ptr(),
             iocp_events.len() as ULONG,
             &mut completion_count as *mut _,
-            INFINITE,
+            //INFINITE,
+            //Just wait 3 second for testing
+            3000,
             FALSE,
         )
     };
+    //epoll_wait end
 
     println!("Return value: {:?}", r);
     println!("completion_count: {:?}", completion_count);
