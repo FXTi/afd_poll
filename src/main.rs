@@ -10,6 +10,7 @@ use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
 use std::net::TcpListener;
+use std::os::windows::io::AsRawSocket;
 use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
@@ -296,7 +297,7 @@ fn main() {
     //need to set events
     //let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
     let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
-    let sock: SOCKET = listener.as_raw_socket();
+    let sock = listener.as_raw_socket() as SOCKET;
     let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN | EPOLLOUT;
 
     //port__ctl_add() start
