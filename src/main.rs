@@ -9,6 +9,7 @@ use widestring::U16CString;
 use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
+use std::net::TcpListener;
 use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
@@ -20,7 +21,7 @@ use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
 use winapi::um::winbase::{SetFileCompletionNotificationModes, INFINITE};
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
 use winapi::um::winsock2::{
-    socket, WSACleanup, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
+    socket, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
 };
 
 #[allow(non_snake_case)]
@@ -293,8 +294,10 @@ fn main() {
     //create test socket
     //Need more changes
     //need to set events
-    let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
-    let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN;
+    //let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
+    let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
+    let sock: SOCKET = listener.as_raw_socket();
+    let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN | EPOLLOUT;
 
     //port__ctl_add() start
     let base_sock = ws_get_base_socket(&sock);
