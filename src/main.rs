@@ -9,11 +9,13 @@ use widestring::U16CString;
 use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
+use std::cmp;
 use std::net::TcpListener;
 use std::os::windows::io::AsRawSocket;
 use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
+use winapi::shared::ws2def::WSABUF;
 use winapi::shared::ws2def::{AF_INET, IPPROTO_TCP, SOCK_STREAM};
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
 use winapi::um::ioapiset::{CreateIoCompletionPort, GetQueuedCompletionStatusEx};
@@ -24,6 +26,7 @@ use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER
 use winapi::um::winsock2::{
     socket, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
 };
+use winapi::um::winsock2::{u_long, WSARecv};
 
 #[allow(non_snake_case)]
 #[repr(C)]
@@ -283,6 +286,13 @@ fn sock_afd_events_to_epoll_events(afd_events: &DWORD) -> u32 {
     epoll_events
 }
 
+unsafe fn slice2buf(slice: &[u8]) -> WSABUF {
+    WSABUF {
+        len: cmp::min(slice.len(), <u_long>::max_value() as usize) as u_long,
+        buf: slice.as_ptr() as *mut _,
+    }
+}
+
 fn main() {
     //epoll_create() start
     ws_global_init();
@@ -300,6 +310,25 @@ fn main() {
     let (sock, _) = listener.accept().unwrap();
     let sock = sock.as_raw_socket() as SOCKET;
     let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN | EPOLLOUT;
+
+    {
+        let mut buff: [u8; 256] = [u8::default(); 256];
+        let mut buf = unsafe { slice2buf(&buff) };
+        let mut flags = 0;
+        let mut bytes_read: DWORD = 0;
+        let mut overlapped = OVERLAPPED::default();
+        unsafe {
+            WSARecv(
+                sock,
+                &mut buf,
+                1,
+                &mut bytes_read,
+                &mut flags,
+                &mut overlapped as *mut _,
+                None,
+            );
+        }
+    }
 
     //port__ctl_add() start
     let base_sock = ws_get_base_socket(&sock);
