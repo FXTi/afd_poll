@@ -16,17 +16,15 @@ use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWC
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::shared::ws2def::WSABUF;
-use winapi::shared::ws2def::{AF_INET, IPPROTO_TCP, SOCK_STREAM};
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
 use winapi::um::ioapiset::{CreateIoCompletionPort, GetQueuedCompletionStatusEx};
 use winapi::um::minwinbase::{OVERLAPPED, OVERLAPPED_ENTRY};
-use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
-use winapi::um::winbase::{SetFileCompletionNotificationModes, INFINITE};
-use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
-use winapi::um::winsock2::{
-    socket, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
+use winapi::um::winbase::{
+    SetFileCompletionNotificationModes, FILE_SKIP_SET_EVENT_ON_HANDLE, INFINITE,
 };
+use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
 use winapi::um::winsock2::{u_long, WSARecv};
+use winapi::um::winsock2::{WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA};
 
 #[allow(non_snake_case)]
 #[repr(C)]
@@ -160,7 +158,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         NtCreateFile(
             &mut afd_helper_handle as PHANDLE,
             SYNCHRONIZE,
-            &afd__helper_attributes as *const _ as *mut _,
+            &*afd__helper_attributes as *const _ as *mut _,
             &mut iosb as *mut _,
             NULL as _,
             0,
@@ -172,7 +170,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         )
     };
 
-    if status == STATUS_SUCCESS {
+    if status != STATUS_SUCCESS {
         return -1;
     }
 
@@ -193,6 +191,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
     }
 }
 
+#[allow(non_snake_case)]
 fn port__create_iocp() -> HANDLE {
     //just return the result, error handling left for future
     let iocp = unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0) };
