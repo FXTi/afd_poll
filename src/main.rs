@@ -388,6 +388,8 @@ fn main() {
         println!("    lpOverlapped: {:?}", ele.lpOverlapped);
         if NULL as *const OVERLAPPED != ele.lpOverlapped {
             unsafe {
+                //Pointer offset calculate according to Wepoll's sock_feed_event()
+                //Size of OVERLAPPED & AFD_POLL_INFO are both 32 bits
                 let pafd_poll_info: *mut AFD_POLL_INFO =
                     ele.lpOverlapped.add(size_of::<OVERLAPPED>()) as *const _ as *mut _;
                 let iocp_events =
