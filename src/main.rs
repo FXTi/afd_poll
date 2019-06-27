@@ -139,7 +139,7 @@ lazy_static! {
     static ref afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
         RootDirectory: NULL,
-        ObjectName: &afd__helper_name as *const _ as *mut _,
+        ObjectName: &*afd__helper_name as *const _ as *mut _,
         Attributes: 0,
         SecurityDescriptor: NULL,
         SecurityQualityOfService: NULL,
