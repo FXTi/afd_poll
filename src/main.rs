@@ -386,11 +386,15 @@ fn main() {
         println!("  Event: ");
         println!("    lpCompletionKey: {:?}", ele.lpCompletionKey);
         println!("    lpOverlapped: {:?}", ele.lpOverlapped);
-        /* ignore it for now
-        if NULL as _ != ele.lpOverlapped {
-            println!("      *lpOverlapped: {:?}", *ele.lpOverlapped);
+        if NULL as *const OVERLAPPED != ele.lpOverlapped {
+            unsafe {
+                let pafd_poll_info: *mut AFD_POLL_INFO =
+                    ele.lpOverlapped.add(size_of::<OVERLAPPED>()) as *const _ as *mut _;
+                let iocp_events =
+                    sock_afd_events_to_epoll_events(&(*pafd_poll_info).Handles[0].Events);
+                println!("      events: 0x{:x?}", iocp_events);
+            }
         }
-        */
         println!("    Internal: {:?}", ele.Internal);
         println!(
             "    dwNumberOfBytesTransferred: {:?}",
