@@ -171,6 +171,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
     };
 
     if status != STATUS_SUCCESS {
+        println!("NtCreateFile error: 0x{:x?}", unsafe { RtlNtStatusToDosError(status) });
         return -1;
     }
 
