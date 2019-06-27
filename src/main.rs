@@ -131,9 +131,14 @@ unsafe impl Sync for OBJECT_ATTRIBUTES {}
 lazy_static! {
     static ref afd___helper_name: U16CString =
         U16CString::from_str("\\Device\\Afd\\Wepoll").unwrap();
+    static ref afd___helper_name_len: usize = U16CString::from_str("\\Device\\Afd\\Wepoll")
+        .unwrap()
+        .into_vec_with_nul()
+        .len()
+        * size_of::<u16>();
     static ref afd__helper_name: UNICODE_STRING = UNICODE_STRING {
-        Length: (size_of::<afd___helper_name>() - size_of::<u16>()) as USHORT,
-        MaximumLength: size_of::<afd___helper_name>() as USHORT,
+        Length: *afd___helper_name_len as USHORT,
+        MaximumLength: (*afd___helper_name_len - size_of::<u16>()) as USHORT,
         Buffer: afd___helper_name.as_ptr() as *const _ as *mut _,
     };
     static ref afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
@@ -171,7 +176,9 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
     };
 
     if status != STATUS_SUCCESS {
-        println!("NtCreateFile error: 0x{:x?}", unsafe { RtlNtStatusToDosError(status) });
+        println!("NtCreateFile error: 0x{:x?}", unsafe {
+            RtlNtStatusToDosError(status)
+        });
         return -1;
     }
 
