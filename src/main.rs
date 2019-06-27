@@ -305,9 +305,10 @@ fn main() {
     //create test socket
     //let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
     let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
-    let (sock, _) = listener.accept().unwrap();
-    let sock = sock.as_raw_socket() as SOCKET;
-    std::mem::forget(sock);
+    let (net_sock, _) = listener.accept().unwrap();
+    let sock = net_sock.as_raw_socket() as SOCKET;
+    std::mem::forget(listener);
+    std::mem::forget(net_sock);
     let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN | EPOLLOUT;
 
     {
