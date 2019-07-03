@@ -6,22 +6,25 @@ use ntapi::ntioapi::{
 use ntapi::ntrtl::RtlNtStatusToDosError;
 use std::mem::size_of;
 use widestring::U16CString;
-use winapi::shared::minwindef::{DWORD, LPVOID, MAKEWORD, ULONG, USHORT};
+use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
+use std::cmp;
+use std::net::TcpListener;
+use std::os::windows::io::AsRawSocket;
 use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
-use winapi::shared::ws2def::{AF_INET, IPPROTO_TCP, SOCK_STREAM};
+use winapi::shared::ws2def::WSABUF;
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
-use winapi::um::ioapiset::CreateIoCompletionPort;
-use winapi::um::minwinbase::OVERLAPPED;
-use winapi::um::winbase::SetFileCompletionNotificationModes;
-use winapi::um::winbase::FILE_SKIP_SET_EVENT_ON_HANDLE;
-use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
-use winapi::um::winsock2::{
-    socket, WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA,
+use winapi::um::ioapiset::{CreateIoCompletionPort, GetQueuedCompletionStatusEx};
+use winapi::um::minwinbase::{OVERLAPPED, OVERLAPPED_ENTRY};
+use winapi::um::winbase::{
+    SetFileCompletionNotificationModes, FILE_SKIP_SET_EVENT_ON_HANDLE, INFINITE,
 };
+use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, HANDLE, LARGE_INTEGER, SYNCHRONIZE};
+use winapi::um::winsock2::{u_long, WSARecv};
+use winapi::um::winsock2::{WSAIoctl, WSAStartup, INVALID_SOCKET, SOCKET, SOCKET_ERROR, WSADATA};
 
 #[allow(non_snake_case)]
 #[repr(C)]
@@ -128,15 +131,20 @@ unsafe impl Sync for OBJECT_ATTRIBUTES {}
 lazy_static! {
     static ref afd___helper_name: U16CString =
         U16CString::from_str("\\Device\\Afd\\Wepoll").unwrap();
+    static ref afd___helper_name_len: usize = U16CString::from_str("\\Device\\Afd\\Wepoll")
+        .unwrap()
+        .into_vec_with_nul()
+        .len()
+        * size_of::<u16>();
     static ref afd__helper_name: UNICODE_STRING = UNICODE_STRING {
-        Length: (size_of::<afd___helper_name>() - size_of::<u16>()) as USHORT,
-        MaximumLength: size_of::<afd___helper_name>() as USHORT,
+        Length: *afd___helper_name_len as USHORT,
+        MaximumLength: (*afd___helper_name_len - size_of::<u16>()) as USHORT,
         Buffer: afd___helper_name.as_ptr() as *const _ as *mut _,
     };
     static ref afd__helper_attributes: OBJECT_ATTRIBUTES = OBJECT_ATTRIBUTES {
         Length: size_of::<OBJECT_ATTRIBUTES>() as ULONG,
         RootDirectory: NULL,
-        ObjectName: &afd__helper_name as *const _ as *mut _,
+        ObjectName: &*afd__helper_name as *const _ as *mut _,
         Attributes: 0,
         SecurityDescriptor: NULL,
         SecurityQualityOfService: NULL,
@@ -155,7 +163,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         NtCreateFile(
             &mut afd_helper_handle as PHANDLE,
             SYNCHRONIZE,
-            &afd__helper_attributes as *const _ as *mut _,
+            &*afd__helper_attributes as *const _ as *mut _,
             &mut iosb as *mut _,
             NULL as _,
             0,
@@ -167,7 +175,10 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         )
     };
 
-    if status == STATUS_SUCCESS {
+    if status != STATUS_SUCCESS {
+        println!("NtCreateFile error: 0x{:x?}", unsafe {
+            RtlNtStatusToDosError(status)
+        });
         return -1;
     }
 
@@ -188,6 +199,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
     }
 }
 
+#[allow(non_snake_case)]
 fn port__create_iocp() -> HANDLE {
     //just return the result, error handling left for future
     let iocp = unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0) };
@@ -215,36 +227,192 @@ const AFD_POLL_LOCAL_CLOSE: ULONG = 0x0020;
 const AFD_POLL_ACCEPT: ULONG = 0x0080;
 const AFD_POLL_CONNECT_FAIL: ULONG = 0x0100;
 
+const EPOLLIN: u32 = 0b1;
+const EPOLLPRI: u32 = 0b10;
+const EPOLLOUT: u32 = 0b100;
+const EPOLLERR: u32 = 0b1000;
+const EPOLLHUP: u32 = 0b10000;
+const EPOLLRDNORM: u32 = 0b1000000;
+const EPOLLRDBAND: u32 = 0b10000000;
+const EPOLLWRNORM: u32 = 0b100000000;
+const EPOLLWRBAND: u32 = 0b1000000000;
+const EPOLLMSG: u32 = 0b10000000000;
+const EPOLLRDHUP: u32 = 0b10000000000000;
+const EPOLLONESHOT: u32 = 0b10000000000000000000000000000000;
+
+fn sock_epoll_events_to_afd_events(epoll_events: u32) -> DWORD {
+    /* Always monitor for AFD_POLL_LOCAL_CLOSE, which is triggered when the
+     * socket is closed with closesocket() or CloseHandle(). */
+    let mut afd_events = AFD_POLL_LOCAL_CLOSE;
+
+    if 0 != (epoll_events & (EPOLLIN | EPOLLRDNORM)) {
+        afd_events |= AFD_POLL_RECEIVE | AFD_POLL_ACCEPT;
+    }
+    if 0 != (epoll_events & (EPOLLPRI | EPOLLRDBAND)) {
+        afd_events |= AFD_POLL_RECEIVE_EXPEDITED;
+    }
+    if 0 != (epoll_events & (EPOLLOUT | EPOLLWRNORM | EPOLLWRBAND)) {
+        afd_events |= AFD_POLL_SEND;
+    }
+    if 0 != (epoll_events & (EPOLLIN | EPOLLRDNORM | EPOLLRDHUP)) {
+        afd_events |= AFD_POLL_DISCONNECT;
+    }
+    if 0 != (epoll_events & EPOLLHUP) {
+        afd_events |= AFD_POLL_ABORT;
+    }
+    if 0 != (epoll_events & EPOLLERR) {
+        afd_events |= AFD_POLL_CONNECT_FAIL;
+    }
+
+    afd_events
+}
+
+fn sock_afd_events_to_epoll_events(afd_events: &DWORD) -> u32 {
+    let mut epoll_events: u32 = 0;
+
+    if 0 != (*afd_events & (AFD_POLL_RECEIVE | AFD_POLL_ACCEPT)) {
+        epoll_events |= EPOLLIN | EPOLLRDNORM;
+    }
+    if 0 != (*afd_events & AFD_POLL_RECEIVE_EXPEDITED) {
+        epoll_events |= EPOLLPRI | EPOLLRDBAND;
+    }
+    if 0 != (*afd_events & AFD_POLL_SEND) {
+        epoll_events |= EPOLLOUT | EPOLLWRNORM | EPOLLWRBAND;
+    }
+    if 0 != (*afd_events & AFD_POLL_DISCONNECT) {
+        epoll_events |= EPOLLIN | EPOLLRDNORM | EPOLLRDHUP;
+    }
+    if 0 != (*afd_events & AFD_POLL_ABORT) {
+        epoll_events |= EPOLLHUP;
+    }
+    if 0 != (*afd_events & AFD_POLL_CONNECT_FAIL) {
+        /* Linux reports all these events after connect() has failed. */
+        epoll_events |= EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDNORM | EPOLLWRNORM | EPOLLRDHUP;
+    }
+
+    epoll_events
+}
+
+unsafe fn slice2buf(slice: &[u8]) -> WSABUF {
+    WSABUF {
+        len: cmp::min(slice.len(), <u_long>::max_value() as usize) as u_long,
+        buf: slice.as_ptr() as *mut _,
+    }
+}
+
+#[repr(C)]
+struct Binding {
+    overlapped: OVERLAPPED,
+    poll_info: AFD_POLL_INFO,
+}
+
 fn main() {
+    //epoll_create() start
+    ws_global_init();
+    println!("WS init complete.");
+
     let mut iocp: HANDLE = port__create_iocp();
     assert!(iocp != NULL);
+    //epoll_create() end
+
+    //create test socket
+    //let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
+    let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
+    let (net_sock, _) = listener.accept().unwrap();
+    let sock = net_sock.as_raw_socket() as SOCKET;
+    std::mem::forget(listener);
+    std::mem::forget(net_sock);
+    let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN | EPOLLOUT;
+
+    {
+        let mut buff: [u8; 256] = [u8::default(); 256];
+        let mut buf = unsafe { slice2buf(&buff) };
+        let mut flags = 0;
+        let mut bytes_read: DWORD = 0;
+        let mut overlapped = OVERLAPPED::default();
+        unsafe {
+            WSARecv(
+                sock,
+                &mut buf,
+                1,
+                &mut bytes_read,
+                &mut flags,
+                &mut overlapped as *mut _,
+                None,
+            );
+        }
+    }
+
+    //port__ctl_add() start
+    let base_sock = ws_get_base_socket(&sock);
 
     let mut afd_helper_handle: HANDLE = NULL;
     afd_create_helper_handle(&mut iocp, &mut afd_helper_handle);
     println!("{:?}", afd_helper_handle);
 
-    ws_global_init();
-    println!("WS init complete.");
-
-    let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
-    let mut base_sock = ws_get_base_socket(&sock);
-
-    let mut poll_info = AFD_POLL_INFO {
-        Timeout: LARGE_INTEGER::default(),
-        NumberOfHandles: 1,
-        Exclusive: 0,
-        Handles: [AFD_POLL_HANDLE_INFO {
-            Handle: &mut base_sock as *mut _ as HANDLE,
-            Events: AFD_POLL_RECEIVE | AFD_POLL_ACCEPT,
-            Status: 0,
-        }],
+    let mut binding = Binding {
+        overlapped: OVERLAPPED::default(),
+        poll_info: AFD_POLL_INFO {
+            Timeout: LARGE_INTEGER::default(),
+            NumberOfHandles: 1,
+            Exclusive: 0,
+            Handles: [AFD_POLL_HANDLE_INFO {
+                Handle: base_sock as HANDLE,
+                Events: sock_epoll_events_to_afd_events(socket_event),
+                Status: 0,
+            }],
+        },
     };
-    let mut overlapped = OVERLAPPED::default();
-    unsafe { *poll_info.Timeout.QuadPart_mut() = i64::max_value() };
+    unsafe { *binding.poll_info.Timeout.QuadPart_mut() = i64::max_value() };
     //memset(&sock_state->overlapped, 0, sizeof sock_state->overlapped);
 
-    let r = afd_poll(afd_helper_handle, &mut poll_info, &mut overlapped);
+    let r = afd_poll(
+        afd_helper_handle,
+        &mut binding.poll_info,
+        &mut binding.overlapped,
+    );
     println!("{:?}", r);
+    //port__ctl_add() end
 
-    //GetQueuedCompletionStatusEx
+    //epoll_wait start
+    let mut completion_count: DWORD = 0;
+    let mut iocp_events: [OVERLAPPED_ENTRY; 256] = [OVERLAPPED_ENTRY::default(); 256];
+    let r = unsafe {
+        GetQueuedCompletionStatusEx(
+            iocp,
+            iocp_events.as_mut_ptr(),
+            iocp_events.len() as ULONG,
+            &mut completion_count as *mut _,
+            //INFINITE,
+            //Just wait 3 second for testing
+            3000,
+            FALSE,
+        )
+    };
+    //epoll_wait end
+
+    println!("Return value: {:?}", r);
+    println!("completion_count: {:?}", completion_count);
+    println!("iocp_events: ");
+    for ele in iocp_events[0..completion_count as usize].iter() {
+        println!("  Event: ");
+        println!("    lpCompletionKey: {:?}", ele.lpCompletionKey);
+        println!("    lpOverlapped: {:?}", ele.lpOverlapped);
+        if NULL as *const OVERLAPPED != ele.lpOverlapped {
+            unsafe {
+                //Pointer offset calculate according to Wepoll's sock_feed_event()
+                //Size of OVERLAPPED & AFD_POLL_INFO are both 32 bits
+                let pafd_poll_info: *const AFD_POLL_INFO =
+                    &((*(ele.lpOverlapped as *const Binding)).poll_info) as *const _;
+                let iocp_events =
+                    sock_afd_events_to_epoll_events(&(*pafd_poll_info).Handles[0].Events);
+                println!("      events: 0x{:x?}", iocp_events);
+            }
+        }
+        println!("    Internal: {:?}", ele.Internal);
+        println!(
+            "    dwNumberOfBytesTransferred: {:?}",
+            ele.dwNumberOfBytesTransferred
+        );
+    }
 }
