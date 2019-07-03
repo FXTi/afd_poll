@@ -300,6 +300,12 @@ unsafe fn slice2buf(slice: &[u8]) -> WSABUF {
     }
 }
 
+#[repr(C)]
+struct Binding {
+    overlapped: OVERLAPPED,
+    poll_info: AFD_POLL_INFO,
+}
+
 fn main() {
     //epoll_create() start
     ws_global_init();
@@ -344,21 +350,27 @@ fn main() {
     afd_create_helper_handle(&mut iocp, &mut afd_helper_handle);
     println!("{:?}", afd_helper_handle);
 
-    let mut poll_info = AFD_POLL_INFO {
-        Timeout: LARGE_INTEGER::default(),
-        NumberOfHandles: 1,
-        Exclusive: 0,
-        Handles: [AFD_POLL_HANDLE_INFO {
-            Handle: base_sock as HANDLE,
-            Events: sock_epoll_events_to_afd_events(socket_event),
-            Status: 0,
-        }],
+    let mut binding = Binding {
+        overlapped: OVERLAPPED::default(),
+        poll_info: AFD_POLL_INFO {
+            Timeout: LARGE_INTEGER::default(),
+            NumberOfHandles: 1,
+            Exclusive: 0,
+            Handles: [AFD_POLL_HANDLE_INFO {
+                Handle: base_sock as HANDLE,
+                Events: sock_epoll_events_to_afd_events(socket_event),
+                Status: 0,
+            }],
+        },
     };
-    let mut overlapped = OVERLAPPED::default();
-    unsafe { *poll_info.Timeout.QuadPart_mut() = i64::max_value() };
+    unsafe { *binding.poll_info.Timeout.QuadPart_mut() = i64::max_value() };
     //memset(&sock_state->overlapped, 0, sizeof sock_state->overlapped);
 
-    let r = afd_poll(afd_helper_handle, &mut poll_info, &mut overlapped);
+    let r = afd_poll(
+        afd_helper_handle,
+        &mut binding.poll_info,
+        &mut binding.overlapped,
+    );
     println!("{:?}", r);
     //port__ctl_add() end
 
@@ -390,8 +402,8 @@ fn main() {
             unsafe {
                 //Pointer offset calculate according to Wepoll's sock_feed_event()
                 //Size of OVERLAPPED & AFD_POLL_INFO are both 32 bits
-                let pafd_poll_info: *mut AFD_POLL_INFO =
-                    ele.lpOverlapped.add(size_of::<OVERLAPPED>()) as *const _ as *mut _;
+                let pafd_poll_info: *const AFD_POLL_INFO =
+                    &((*(ele.lpOverlapped as *const Binding)).poll_info) as *const _;
                 let iocp_events =
                     sock_afd_events_to_epoll_events(&(*pafd_poll_info).Handles[0].Events);
                 println!("      events: 0x{:x?}", iocp_events);
