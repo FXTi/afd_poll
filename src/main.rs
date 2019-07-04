@@ -9,9 +9,9 @@ use widestring::U16CString;
 use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
-use std::cmp;
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::os::windows::io::AsRawSocket;
+use std::{cmp, thread, time};
 use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
 use winapi::shared::winerror::WSAEINPROGRESS;
@@ -317,6 +317,14 @@ fn main() {
 
     //create test socket
     //let sock = unsafe { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP as i32) };
+    thread::spawn(|| {
+        let one_sec = time::Duration::from_secs(1);
+        thread::sleep(one_sec);
+        let stream = TcpStream::connect("127.0.0.1:8080").unwrap();
+        thread::sleep(one_sec);
+        stream
+    });
+
     let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
     let (net_sock, _) = listener.accept().unwrap();
     let sock = net_sock.as_raw_socket() as SOCKET;
@@ -350,7 +358,7 @@ fn main() {
     afd_create_helper_handle(&mut iocp, &mut afd_helper_handle);
     println!("{:?}", afd_helper_handle);
 
-    let mut binding = Binding {
+    let mut binding = Box::new(Binding {
         overlapped: OVERLAPPED::default(),
         poll_info: AFD_POLL_INFO {
             Timeout: LARGE_INTEGER::default(),
@@ -362,7 +370,7 @@ fn main() {
                 Status: 0,
             }],
         },
-    };
+    });
     unsafe { *binding.poll_info.Timeout.QuadPart_mut() = i64::max_value() };
     //memset(&sock_state->overlapped, 0, sizeof sock_state->overlapped);
 
@@ -400,12 +408,8 @@ fn main() {
         println!("    lpOverlapped: {:?}", ele.lpOverlapped);
         if NULL as *const OVERLAPPED != ele.lpOverlapped {
             unsafe {
-                //Pointer offset calculate according to Wepoll's sock_feed_event()
-                //Size of OVERLAPPED & AFD_POLL_INFO are both 32 bits
-                let pafd_poll_info: *const AFD_POLL_INFO =
-                    &((*(ele.lpOverlapped as *const Binding)).poll_info) as *const _;
-                let iocp_events =
-                    sock_afd_events_to_epoll_events(&(*pafd_poll_info).Handles[0].Events);
+                let afd_poll_info = &(*(ele.lpOverlapped as *const Binding)).poll_info;
+                let iocp_events = sock_afd_events_to_epoll_events(&afd_poll_info.Handles[0].Events);
                 println!("      events: 0x{:x?}", iocp_events);
             }
         }
