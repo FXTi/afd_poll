@@ -34,3 +34,8 @@ steps:
   displayName: cargo check --no-default-features
   env:
     CI: 'True'
+
+- script: cargo test 
+  displayName: cargo test 
+  env:
+    CI: 'True'
