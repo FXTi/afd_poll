@@ -303,7 +303,7 @@ unsafe fn slice2buf(slice: &[u8]) -> WSABUF {
 }
 
 #[repr(C)]
-struct Binding {
+struct PollInfoBinding {
     overlapped: OVERLAPPED,
     poll_info: AFD_POLL_INFO,
 }
@@ -362,7 +362,7 @@ fn test_tcp_listener() {
     afd_create_helper_handle(&mut iocp, &mut afd_helper_handle);
     println!("{:?}", afd_helper_handle);
 
-    let mut binding = Box::new(Binding {
+    let mut binding = Box::new(PollInfoBinding {
         overlapped: OVERLAPPED::default(),
         poll_info: AFD_POLL_INFO {
             Timeout: LARGE_INTEGER::default(),
@@ -413,7 +413,7 @@ fn test_tcp_listener() {
         //println!("    lpOverlapped: {:?}", ele.lpOverlapped);
         if NULL as *const OVERLAPPED != ele.lpOverlapped {
             unsafe {
-                let afd_poll_info = &(*(ele.lpOverlapped as *const Binding)).poll_info;
+                let afd_poll_info = &(*(ele.lpOverlapped as *const PollInfoBinding)).poll_info;
                 let iocp_events = sock_afd_events_to_epoll_events(&afd_poll_info.Handles[0].Events);
                 //println!("      events: 0x{:x?}", iocp_events);
                 assert!(iocp_events & EPOLLOUT != 0);
