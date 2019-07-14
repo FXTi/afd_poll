@@ -1,3 +1,5 @@
+mod selector;
+mod tcp;
 #[macro_use]
 extern crate lazy_static;
 use ntapi::ntioapi::{
