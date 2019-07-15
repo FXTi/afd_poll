@@ -1,11 +1,14 @@
+mod interests;
 mod selector;
 mod tcp;
+mod token;
 #[macro_use]
 extern crate lazy_static;
 use ntapi::ntioapi::{
     IO_STATUS_BLOCK_u, NtCreateFile, NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK,
 };
 use ntapi::ntrtl::RtlNtStatusToDosError;
+use std::io;
 use std::mem::size_of;
 use widestring::U16CString;
 use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
@@ -151,6 +154,7 @@ lazy_static! {
         SecurityDescriptor: NULL,
         SecurityQualityOfService: NULL,
     };
+    static ref init_done: bool = false;
 }
 
 #[allow(non_snake_case)]
@@ -218,6 +222,19 @@ fn ws_global_init() -> i32 {
         0 => 0,
         _ => -1,
     }
+}
+
+fn init() -> io::Result<()> {
+    if !*init_done {
+        //Do WS's init for now
+        if ws_global_init() < 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        *init_done = true;
+    }
+
+    Ok(())
 }
 
 const AFD_POLL_RECEIVE: ULONG = 0x0001;

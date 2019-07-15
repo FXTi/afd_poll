@@ -1,5 +1,11 @@
-use crate::{sock_afd_events_to_epoll_events, PollInfoBinding};
-use miow;
+use crate::interests::Interests;
+use crate::tcp::TcpStream;
+use crate::token::Token;
+use crate::{init, sock_afd_events_to_epoll_events, PollInfoBinding};
+use crate::{
+    EPOLLERR, EPOLLHUP, EPOLLIN, EPOLLMSG, EPOLLONESHOT, EPOLLOUT, EPOLLPRI, EPOLLRDBAND,
+    EPOLLRDHUP, EPOLLRDNORM, EPOLLWRBAND, EPOLLWRNORM,
+};
 use miow::iocp::{CompletionPort, CompletionStatus};
 use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -64,5 +70,23 @@ impl Selector {
 
     pub fn port(&self) -> &CompletionPort {
         &self.inner.port
+    }
+
+    pub fn register(
+        &mut self,
+        sock: &TcpStream,
+        token: Token,
+        interests: Interests,
+    ) -> io::Result<()> {
+        init().unwrap();
+
+        let socket = sock.socket();
+        //Then set interests, considering convert from Interests to undrlaying type
+        let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN | EPOLLOUT;
+
+        sock.afd_helper_handle(&mut self.inner.port);
+
+        //update queue??
+        Ok(())
     }
 }
