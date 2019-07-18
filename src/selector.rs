@@ -1,22 +1,72 @@
 use crate::interests::Interests;
 use crate::tcp::TcpStream;
 use crate::token::Token;
-use crate::{init, sock_afd_events_to_epoll_events, PollInfoBinding};
+use crate::{afd_create_helper_handle, init, sock_afd_events_to_epoll_events, PollInfoBinding};
 use crate::{
     EPOLLERR, EPOLLHUP, EPOLLIN, EPOLLMSG, EPOLLONESHOT, EPOLLOUT, EPOLLPRI, EPOLLRDBAND,
     EPOLLRDHUP, EPOLLRDNORM, EPOLLWRBAND, EPOLLWRNORM,
 };
 use miow::iocp::{CompletionPort, CompletionStatus};
 use std::io;
+use std::os::windows::io::AsRawHandle;
+use std::ptr::null_mut;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use winapi::shared::winerror::WAIT_TIMEOUT;
+use winapi::um::winnt::HANDLE;
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+static MAX_SOCKET_PER_POLL_GROUP: i32 = 32;
+
+#[derive(Clone)]
+pub struct PollGroup {
+    pub group_size: i32,
+    //one PollGroup can have at most 32 socket associated
+    pub afd_helper_handle: HANDLE,
+}
+
+impl PollGroup {
+    pub fn new(iocp: HANDLE) -> io::Result<PollGroup> {
+        afd_create_helper_handle(&mut iocp).map(|achh| PollGroup {
+            group_size: 0,
+            afd_helper_handle: achh,
+        })
+    }
+}
+
+pub struct PollGroupQueue {
+    queue: Vec<PollGroup>,
+    iocp: HANDLE,
+}
+
+impl PollGroupQueue {
+    pub fn new(completion_port: &CompletionPort) -> PollGroupQueue {
+        PollGroupQueue {
+            queue: Vec::new(),
+            iocp: completion_port.as_raw_handle(),
+        }
+    }
+
+    pub fn acquire(&mut self) -> io::Result<PollGroup> {
+        let n = self.queue.len();
+        if n == 0 || self.queue[n - 1].group_size > MAX_SOCKET_PER_POLL_GROUP {
+            PollGroup::new(self.iocp).map(|pg| {
+                self.queue.push(pg);
+            });
+        }
+        self.queue[n - 1].group_size += 1;
+        Ok(self.queue[n - 1].clone())
+    }
+}
 
 pub struct Selector {
     inner: Arc<SelectorInner>,
+    //act as poll_group in wepoll, to manage limited use of afd_helper_handle
+    poll_group: PollGroupQueue,
+    //to note the number of thread who is polling on this iocp port
+    poll_count: i32,
+    lock: Mutex<()>,
 }
 
 struct SelectorInner {
@@ -30,6 +80,9 @@ impl Selector {
 
         CompletionPort::new(1).map(|port| Selector {
             inner: Arc::new(SelectorInner { id, port }),
+            poll_group: PollGroupQueue::new(&port),
+            poll_count: 0,
+            lock: Mutex::new(()),
         })
     }
 

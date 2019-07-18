@@ -158,7 +158,7 @@ lazy_static! {
 }
 
 #[allow(non_snake_case)]
-fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDLE) -> i32 {
+fn afd_create_helper_handle(iocp: &mut HANDLE) -> io::Result<HANDLE> {
     let mut afd_helper_handle: HANDLE = NULL;
     let mut iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u { Status: 0 },
@@ -185,7 +185,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
         println!("NtCreateFile error: 0x{:x?}", unsafe {
             RtlNtStatusToDosError(status)
         });
-        return -1;
+        return Err(io::Error::new(io::ErrorKind::Other, status.to_string()));
     }
 
     unsafe {
@@ -197,10 +197,9 @@ fn afd_create_helper_handle(iocp: &mut HANDLE, afd_helper_handle_out: &mut HANDL
                 ))
         {
             CloseHandle(afd_helper_handle);
-            -1
+            Err(io::Error::new(io::ErrorKind::Other, ""))
         } else {
-            *afd_helper_handle_out = afd_helper_handle;
-            0
+            Ok(afd_helper_handle)
         }
     }
 }
@@ -375,8 +374,7 @@ fn test_tcp_listener() {
     //port__ctl_add() start
     let base_sock = ws_get_base_socket(&sock);
 
-    let mut afd_helper_handle: HANDLE = NULL;
-    afd_create_helper_handle(&mut iocp, &mut afd_helper_handle);
+    let mut afd_helper_handle = afd_create_helper_handle(&mut iocp).unwrap();
     println!("{:?}", afd_helper_handle);
 
     let mut binding = Box::new(PollInfoBinding {
