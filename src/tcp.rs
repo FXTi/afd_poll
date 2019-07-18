@@ -1,7 +1,9 @@
 use crate::interests::Interests;
 use crate::selector::PollGroup;
 use crate::token::Token;
-use crate::{afd_create_helper_handle, interests_to_epoll, ws_get_base_socket};
+use crate::{
+    afd_create_helper_handle, interests_to_epoll, ws_get_base_socket, SOCK__KNOWN_EPOLL_EVENTS,
+};
 use crate::{
     EPOLLERR, EPOLLHUP, EPOLLIN, EPOLLMSG, EPOLLONESHOT, EPOLLOUT, EPOLLPRI, EPOLLRDBAND,
     EPOLLRDHUP, EPOLLRDNORM, EPOLLWRBAND, EPOLLWRNORM,
@@ -20,6 +22,7 @@ struct State {
     base_sock: SOCKET,
     poll_group: Option<PollGroup>,
     user_events: u32,
+    pending_events: u32,
     user_data: u64,
 }
 
@@ -36,6 +39,7 @@ impl TcpStream {
                 base_sock: 0,
                 poll_group: None,
                 user_events: 0,
+                pending_events: 0,
                 user_data: 0,
             }),
         }
@@ -56,8 +60,21 @@ impl TcpStream {
         self.state.poll_group = Some(poll_group);
     }
 
-    pub(crate) fn set_events(&self, interests: Interests, token: Token) {
+    pub(crate) fn set_events(&self, interests: Interests, token: Token) -> Option<TcpStream> {
         self.state.user_events = interests_to_epoll(interests) | EPOLLERR | EPOLLHUP;
         self.state.user_data = usize::from(token) as u64;
+        if 0 != self.state.user_events & *SOCK__KNOWN_EPOLL_EVENTS & !self.state.pending_events {
+            Some(*self)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn update(&self) -> io::Result<()> {
+        if 0 != self.state.user_events & *SOCK__KNOWN_EPOLL_EVENTS & !self.state.pending_events {
+            //update
+        }
+
+        Ok(())
     }
 }

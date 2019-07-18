@@ -15,7 +15,8 @@ use widestring::U16CString;
 use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
-use libc::EPOLLET;
+//use libc::EPOLLET;
+const EPOLLET: u32 = 0x80000000; //Come from libc source code
 use std::net::{TcpListener, TcpStream};
 use std::os::windows::io::AsRawSocket;
 use std::{cmp, thread, time};

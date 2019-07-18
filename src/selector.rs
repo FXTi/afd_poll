@@ -7,9 +7,11 @@ use crate::{
     EPOLLRDHUP, EPOLLRDNORM, EPOLLWRBAND, EPOLLWRNORM,
 };
 use miow::iocp::{CompletionPort, CompletionStatus};
+use std::collections::VecDeque;
 use std::io;
 use std::os::windows::io::AsRawHandle;
 use std::ptr::null_mut;
+use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -66,6 +68,8 @@ pub struct Selector {
     poll_group_queue: PollGroupQueue,
     //to note the number of thread who is polling on this iocp port
     poll_count: i32,
+    //We still need update_queue
+    update_deque: VecDeque<AtomicPtr<TcpStream>>,
 }
 
 struct SelectorInner {
@@ -89,6 +93,7 @@ impl Selector {
             }),
             poll_group_queue: PollGroupQueue::new(&port),
             poll_count: 0,
+            update_deque: VecDeque::new(),
         })
     }
 
@@ -135,6 +140,17 @@ impl Selector {
         &self.inner.port
     }
 
+    fn request_update(&mut self, tcp_stream: TcpStream) {
+        let element = AtomicPtr::new(&mut tcp_stream as *mut _);
+        if !self.update_deque.contains(&element) {
+            self.update_deque.push_back(element)
+        }
+    }
+
+    fn update_if_polling(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
     pub fn register(
         &mut self,
         sock: &TcpStream,
@@ -151,10 +167,10 @@ impl Selector {
 
         sock.set_poll_group(self.poll_group_queue.acquire().unwrap());
 
-        sock.set_events(interests, token);
-        //if has events and not updated, then update
-        //update_sockets_if_polling
+        if let Some(tcp_stream) = sock.set_events(interests, token) {
+            self.request_update(tcp_stream);
+        }
 
-        Ok(())
+        self.update_if_polling()
     }
 }
