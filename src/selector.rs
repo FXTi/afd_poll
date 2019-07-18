@@ -76,6 +76,9 @@ struct SelectorInner {
 
 impl Selector {
     pub fn new() -> io::Result<Selector> {
+        //Equal to epoll_create, which create port_state representing iocp port
+        init().unwrap();
+
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed) + 1;
 
         CompletionPort::new(1).map(|port| Selector {
