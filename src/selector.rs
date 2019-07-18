@@ -63,15 +63,15 @@ impl PollGroupQueue {
 pub struct Selector {
     inner: Arc<SelectorInner>,
     //act as poll_group in wepoll, to manage limited use of afd_helper_handle
-    poll_group: PollGroupQueue,
+    poll_group_queue: PollGroupQueue,
     //to note the number of thread who is polling on this iocp port
     poll_count: i32,
-    lock: Mutex<()>,
 }
 
 struct SelectorInner {
     id: usize,
     port: CompletionPort,
+    lock: Mutex<()>,
 }
 
 impl Selector {
@@ -82,10 +82,13 @@ impl Selector {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed) + 1;
 
         CompletionPort::new(1).map(|port| Selector {
-            inner: Arc::new(SelectorInner { id, port }),
-            poll_group: PollGroupQueue::new(&port),
+            inner: Arc::new(SelectorInner {
+                id,
+                port,
+                lock: Mutex::new(()),
+            }),
+            poll_group_queue: PollGroupQueue::new(&port),
             poll_count: 0,
-            lock: Mutex::new(()),
         })
     }
 
@@ -95,6 +98,10 @@ impl Selector {
         awakener: Token,
         timeout: Option<Duration>,
     ) -> io::Result<bool> {
+        //init() appear in four functions in epoll
+        //They are just four critical functions, epoll_*
+        init().unwrap();
+
         events.clear();
 
         //According to wepoll, events.status here should be a array of 256 elements.
@@ -134,15 +141,20 @@ impl Selector {
         token: Token,
         interests: Interests,
     ) -> io::Result<()> {
+        //embed register on selector by now
+        //maybe move to struct which construct TcpStream in future pr
         init().unwrap();
 
         let socket = sock.socket();
-        //Then set interests, considering convert from Interests to undrlaying type
-        let socket_event: u32 = EPOLLERR | EPOLLHUP | EPOLLIN | EPOLLOUT;
 
-        sock.afd_helper_handle(&mut self.inner.port);
+        let ws_base_socket = sock.base_socket().unwrap();
 
-        //update queue??
+        sock.set_poll_group(self.poll_group_queue.acquire().unwrap());
+
+        sock.set_events(interests, token);
+        //if has events and not updated, then update
+        //update_sockets_if_polling
+
         Ok(())
     }
 }

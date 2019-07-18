@@ -1,5 +1,13 @@
-use crate::{afd_create_helper_handle, ws_get_base_socket};
+use crate::interests::Interests;
+use crate::selector::PollGroup;
+use crate::token::Token;
+use crate::{afd_create_helper_handle, interests_to_epoll, ws_get_base_socket};
+use crate::{
+    EPOLLERR, EPOLLHUP, EPOLLIN, EPOLLMSG, EPOLLONESHOT, EPOLLOUT, EPOLLPRI, EPOLLRDBAND,
+    EPOLLRDHUP, EPOLLRDNORM, EPOLLWRBAND, EPOLLWRNORM,
+};
 use miow::iocp::CompletionPort;
+use std::io;
 use std::net;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::AsRawSocket;
@@ -10,7 +18,9 @@ use winapi::um::winsock2::SOCKET;
 
 struct State {
     base_sock: SOCKET,
-    afd_helper_handle: HANDLE,
+    poll_group: Option<PollGroup>,
+    user_events: u32,
+    user_data: u64,
 }
 
 pub struct TcpStream {
@@ -24,7 +34,9 @@ impl TcpStream {
             sock: socket,
             state: Arc::new(State {
                 base_sock: 0,
-                afd_helper_handle: null_mut(),
+                poll_group: None,
+                user_events: 0,
+                user_data: 0,
             }),
         }
     }
@@ -33,18 +45,19 @@ impl TcpStream {
         self.sock.as_raw_socket() as SOCKET
     }
 
-    pub(crate) fn base_socket(&mut self) -> SOCKET {
-        //init base_socket and return
-        self.state.base_sock = ws_get_base_socket(&self.socket());
-
-        self.state.base_sock
+    pub(crate) fn base_socket(&self) -> io::Result<SOCKET> {
+        ws_get_base_socket(&self.socket()).map(|base_socket| {
+            self.state.base_sock = base_socket;
+            base_socket
+        })
     }
 
-    pub(crate) fn afd_helper_handle(&mut self, iocp: &mut CompletionPort) -> HANDLE {
-        //Whether use a poll group?
-        let mut out: HANDLE = null_mut();
-        afd_create_helper_handle(&mut iocp.as_raw_handle(), &mut out);
+    pub(crate) fn set_poll_group(&self, poll_group: PollGroup) {
+        self.state.poll_group = Some(poll_group);
+    }
 
-        out
+    pub(crate) fn set_events(&self, interests: Interests, token: Token) {
+        self.state.user_events = interests_to_epoll(interests) | EPOLLERR | EPOLLHUP;
+        self.state.user_data = usize::from(token) as u64;
     }
 }

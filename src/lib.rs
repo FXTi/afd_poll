@@ -4,6 +4,7 @@ mod tcp;
 mod token;
 #[macro_use]
 extern crate lazy_static;
+use crate::interests::Interests;
 use ntapi::ntioapi::{
     IO_STATUS_BLOCK_u, NtCreateFile, NtDeviceIoControlFile, FILE_OPEN, IO_STATUS_BLOCK,
 };
@@ -14,6 +15,7 @@ use widestring::U16CString;
 use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 //use winapi::shared::ntdef::UNICODE_STRING;
 //use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
+use libc::EPOLLET;
 use std::net::{TcpListener, TcpStream};
 use std::os::windows::io::AsRawSocket;
 use std::{cmp, thread, time};
@@ -83,7 +85,7 @@ fn afd_poll(
 
 const SIO_BASE_HANDLE: DWORD = 0x48000022;
 
-fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
+fn ws_get_base_socket(socket: &SOCKET) -> io::Result<SOCKET> {
     let mut base_socket: SOCKET = 0;
     let mut bytes: DWORD = 0;
 
@@ -101,11 +103,11 @@ fn ws_get_base_socket(socket: &SOCKET) -> SOCKET {
                 None,
             )
         {
-            return INVALID_SOCKET;
+            return Err(io::Error::new(io::ErrorKind::Other, "INVALID_SOCKET"));
         }
     }
 
-    base_socket
+    Ok(base_socket)
 }
 
 #[allow(non_snake_case)]
@@ -155,6 +157,17 @@ lazy_static! {
         SecurityQualityOfService: NULL,
     };
     static ref init_done: bool = false;
+    static ref SOCK__KNOWN_EPOLL_EVENTS: u32 = EPOLLIN
+        | EPOLLPRI
+        | EPOLLOUT
+        | EPOLLERR
+        | EPOLLHUP
+        | EPOLLRDNORM
+        | EPOLLRDBAND
+        | EPOLLWRNORM
+        | EPOLLWRBAND
+        | EPOLLMSG
+        | EPOLLRDHUP;
 }
 
 #[allow(non_snake_case)]
@@ -324,6 +337,21 @@ struct PollInfoBinding {
     poll_info: AFD_POLL_INFO,
 }
 
+fn interests_to_epoll(interests: Interests) -> u32 {
+    //Will change EPOLLET later
+    let mut kind = EPOLLET;
+
+    if interests.is_readable() {
+        kind |= EPOLLIN;
+    }
+
+    if interests.is_writable() {
+        kind |= EPOLLOUT;
+    }
+
+    kind as u32
+}
+
 #[test]
 fn test_tcp_listener() {
     //epoll_create() start
@@ -372,7 +400,7 @@ fn test_tcp_listener() {
     }
 
     //port__ctl_add() start
-    let base_sock = ws_get_base_socket(&sock);
+    let base_sock = ws_get_base_socket(&sock).unwrap();
 
     let mut afd_helper_handle = afd_create_helper_handle(&mut iocp).unwrap();
     println!("{:?}", afd_helper_handle);

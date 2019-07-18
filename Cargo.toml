@@ -11,6 +11,7 @@ ntapi = "0.3.1"
 widestring = "0.4.0"
 lazy_static = "1.3.0"
 miow = "0.3.3"
+libc = "0.2.58"
 
 [dependencies.winapi]
 version = "0.3.7"
