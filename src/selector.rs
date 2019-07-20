@@ -145,6 +145,8 @@ impl Selector {
         self.update_deque.push_back(element);
     }
 
+    pub(crate) fn dequeue_update(&mut self, tcp_stream: TcpStream) {}
+
     pub fn update_if_polling(&mut self) -> io::Result<()> {
         if self.poll_count > 0 {
             while let Some(sock) = self.update_deque.pop_front() {

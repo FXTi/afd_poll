@@ -2,8 +2,9 @@ use crate::interests::Interests;
 use crate::selector::{PollGroup, Selector};
 use crate::token::Token;
 use crate::{
-    afd_create_helper_handle, interests_to_epoll, ws_get_base_socket, HasOverlappedIoCompleted,
-    PollInfoBinding, SOCK_KNOWN_EPOLL_EVENTS,
+    afd_create_helper_handle, afd_poll, interests_to_epoll, sock_epoll_events_to_afd_events,
+    ws_get_base_socket, HasOverlappedIoCompleted, PollInfoBinding, AFD_POLL_HANDLE_INFO,
+    AFD_POLL_INFO, SOCK_KNOWN_EPOLL_EVENTS,
 };
 use crate::{
     EPOLLERR, EPOLLHUP, EPOLLIN, EPOLLMSG, EPOLLONESHOT, EPOLLOUT, EPOLLPRI, EPOLLRDBAND,
@@ -16,7 +17,10 @@ use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::AsRawSocket;
 use std::ptr::null_mut;
 use std::sync::Arc;
+use winapi::shared::winerror::{ERROR_INVALID_HANDLE, ERROR_IO_PENDING};
+use winapi::um::minwinbase::OVERLAPPED;
 use winapi::um::winnt::HANDLE;
+use winapi::um::winnt::LARGE_INTEGER;
 use winapi::um::winsock2::SOCKET;
 
 #[derive(PartialEq)]
@@ -128,6 +132,20 @@ impl TcpStream {
         Ok(())
     }
 
+    pub(crate) fn delete(&mut self, selector: &Selector, force: bool) -> io::Result<()> {
+        if !self.state.delete_pending {
+            if self.state.poll_state == SockPollState::SOCK_POLL_PENDING {
+                self.cancel_poll();
+            }
+            //get this TcpStream off Selector's update_queue
+            selector.dequeue_update(*self);
+
+            self.state.delete_pending = true;
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn update(&mut self, selector: &mut Selector) -> io::Result<()> {
         assert!(!self.state.delete_pending);
 
@@ -142,8 +160,47 @@ impl TcpStream {
                     Ok(())
                 }
             }
-            SockPollState::SOCK_POLL_CANCELLED => {}
-            SockPollState::SOCK_POLL_IDLE => {}
+            SockPollState::SOCK_POLL_CANCELLED => Ok(()),
+            SockPollState::SOCK_POLL_IDLE => {
+                //Start a new poll operation
+                self.state.binding = PollInfoBinding {
+                    overlapped: OVERLAPPED::default(),
+                    poll_info: AFD_POLL_INFO {
+                        Timeout: LARGE_INTEGER::default(),
+                        NumberOfHandles: 1,
+                        Exclusive: 0,
+                        Handles: [AFD_POLL_HANDLE_INFO {
+                            Handle: self.state.base_sock as HANDLE,
+                            Events: sock_epoll_events_to_afd_events(self.state.user_events),
+                            Status: 0,
+                        }],
+                    },
+                };
+                unsafe { *self.state.binding.poll_info.Timeout.QuadPart_mut() = i64::max_value() };
+
+                if let Some(poll_group) = self.state.poll_group {
+                    let r = afd_poll(
+                        poll_group.afd_helper_handle,
+                        &mut self.state.binding.poll_info,
+                        &mut self.state.binding.overlapped,
+                    );
+
+                    match r {
+                        Ok(()) => Ok(()),
+                        Err(error) => {
+                            if error.raw_os_error() == Some(ERROR_INVALID_HANDLE as _) {
+                                return self.delete(selector, false);
+                            } else if error.raw_os_error() == Some(ERROR_IO_PENDING as _) {
+                                return Ok(());
+                            } else {
+                                return Err(error);
+                            }
+                        }
+                    }
+                } else {
+                    unreachable!();
+                }
+            }
         }
     }
 }

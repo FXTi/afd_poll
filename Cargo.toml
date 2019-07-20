@@ -24,4 +24,5 @@ features = [
   "winerror",
   "ws2def",
   "impl-default",
+  "winerror",
 ]

@@ -22,6 +22,7 @@ use std::os::windows::io::AsRawSocket;
 use std::{cmp, thread, time};
 use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
+use winapi::shared::winerror::ERROR_IO_PENDING;
 use winapi::shared::winerror::WSAEINPROGRESS;
 use winapi::shared::ws2def::WSABUF;
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
@@ -57,7 +58,7 @@ fn afd_poll(
     afd_helper_handle: HANDLE,
     poll_info: &mut AFD_POLL_INFO,
     overlapped: &mut OVERLAPPED,
-) -> u32 {
+) -> io::Result<()> {
     let mut piosb = &mut overlapped.Internal as *mut _ as *mut IO_STATUS_BLOCK;
 
     let status = unsafe {
@@ -78,9 +79,13 @@ fn afd_poll(
     };
 
     match status {
-        STATUS_SUCCESS => 0,
-        STATUS_PENDING => WSAEINPROGRESS,
-        _ => unsafe { RtlNtStatusToDosError(status) },
+        STATUS_SUCCESS => Ok(()),
+        STATUS_PENDING => Err(io::Error::from_raw_os_error(ERROR_IO_PENDING as _)),
+        _ => unsafe {
+            Err(io::Error::from_raw_os_error(
+                RtlNtStatusToDosError(status) as _
+            ))
+        },
     }
 }
 
@@ -445,12 +450,12 @@ fn test_tcp_listener() {
     unsafe { *binding.poll_info.Timeout.QuadPart_mut() = i64::max_value() };
     //memset(&sock_state->overlapped, 0, sizeof sock_state->overlapped);
 
-    let r = afd_poll(
+    afd_poll(
         afd_helper_handle,
         &mut binding.poll_info,
         &mut binding.overlapped,
-    );
-    assert_eq!(r, 0);
+    )
+    .unwrap();
     //port__ctl_add() end
 
     //epoll_wait start
