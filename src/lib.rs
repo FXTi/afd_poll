@@ -201,10 +201,11 @@ fn afd_create_helper_handle(iocp: &mut HANDLE) -> io::Result<HANDLE> {
     };
 
     if status != STATUS_SUCCESS {
-        println!("NtCreateFile error: 0x{:x?}", unsafe {
-            RtlNtStatusToDosError(status)
-        });
-        return Err(io::Error::new(io::ErrorKind::Other, status.to_string()));
+        return unsafe {
+            Err(io::Error::from_raw_os_error(
+                RtlNtStatusToDosError(status) as _
+            ))
+        };
     }
 
     unsafe {
@@ -216,7 +217,7 @@ fn afd_create_helper_handle(iocp: &mut HANDLE) -> io::Result<HANDLE> {
                 ))
         {
             CloseHandle(afd_helper_handle);
-            Err(io::Error::new(io::ErrorKind::Other, ""))
+            Err(io::Error::last_os_error())
         } else {
             Ok(afd_helper_handle)
         }
@@ -224,30 +225,31 @@ fn afd_create_helper_handle(iocp: &mut HANDLE) -> io::Result<HANDLE> {
 }
 
 #[allow(non_snake_case)]
-fn port__create_iocp() -> HANDLE {
+fn port__create_iocp() -> io::Result<HANDLE> {
     //just return the result, error handling left for future
     let iocp = unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0) };
 
-    iocp
+    match iocp {
+        NULL => Err(io::Error::last_os_error()),
+        _ => Ok(iocp),
+    }
 }
 
-fn ws_global_init() -> i32 {
+fn ws_global_init() -> io::Result<()> {
     let mut wsa_data = WSADATA::default();
 
     let r = unsafe { WSAStartup(MAKEWORD(2, 2), &mut wsa_data as *mut _) };
 
     match r {
-        0 => 0,
-        _ => -1,
+        0 => Ok(()),
+        _ => Err(io::Error::from_raw_os_error(r)),
     }
 }
 
 fn init() -> io::Result<()> {
     if !*init_done {
         //Do WS's init for now
-        if ws_global_init() < 0 {
-            return Err(io::Error::last_os_error());
-        }
+        ws_global_init()?;
 
         *init_done = true;
     }
@@ -382,12 +384,11 @@ fn interests_to_epoll(interests: Interests) -> u32 {
 }
 
 #[test]
-fn test_tcp_listener() {
+fn test_tcp_listener() -> io::Result<()> {
     //epoll_create() start
-    assert_eq!(ws_global_init(), 0);
+    ws_global_init()?;
 
-    let mut iocp: HANDLE = port__create_iocp();
-    assert!(iocp != NULL);
+    let mut iocp: HANDLE = port__create_iocp().unwrap();
     //epoll_create() end
 
     //create test socket
@@ -497,4 +498,6 @@ fn test_tcp_listener() {
         //ele.dwNumberOfBytesTransferred
         //);
     }
+
+    Ok(())
 }

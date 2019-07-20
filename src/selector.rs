@@ -83,7 +83,7 @@ struct SelectorInner {
 impl Selector {
     pub fn new() -> io::Result<Selector> {
         //Equal to epoll_create, which create port_state representing iocp port
-        init().unwrap();
+        init()?;
 
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed) + 1;
 
@@ -108,7 +108,7 @@ impl Selector {
     ) -> io::Result<bool> {
         //init() appear in four functions in epoll
         //They are just four critical functions, epoll_*
-        init().unwrap();
+        init()?;
 
         events.clear();
 
@@ -162,7 +162,7 @@ impl Selector {
     pub fn update_if_polling(&mut self) -> io::Result<()> {
         if self.poll_count > 0 {
             while let Some(sock) = self.update_deque.pop_front() {
-                (*sock.load(Ordering::Relaxed)).update(self);
+                (*sock.load(Ordering::Relaxed)).update(self)?;
             }
         }
 
@@ -177,7 +177,7 @@ impl Selector {
     ) -> io::Result<()> {
         //embed register on selector by now
         //maybe move to struct which construct TcpStream in future pr
-        init().unwrap();
+        init()?;
 
         let socket = sock.socket();
 

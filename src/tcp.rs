@@ -105,22 +105,12 @@ impl TcpStream {
                     poll_group.afd_helper_handle,
                     &mut self.state.binding.overlapped as *mut _,
                 );
-                if ret == 0 {
-                    let err = io::Error::last_os_error();
-                    if err.kind() != io::ErrorKind::NotFound {
-                        //io::ErrorKind::NotFound is verified to be the same as ERROR_NOT_FOUND
-                        ///use std::io;
-                        ///
-                        ///fn main() {
-                        ///    // ERROR_FILE_NOT_FOUND
-                        ///    // 2 (0x2)
-                        ///    // The system cannot find the file specified.
-                        ///    // From: https://docs.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
-                        ///    let error = io::Error::from_raw_os_error(0x2);
-                        ///    assert_eq!(error.kind(), io::ErrorKind::NotFound);
-                        ///}
-                        return Err(err);
+                match ret {
+                    0 if io::Error::last_os_error().kind() == io::ErrorKind::NotFound => {}
+                    0 => {
+                        return Err(io::Error::last_os_error());
                     }
+                    _ => {}
                 }
             } else {
                 unreachable!();
@@ -135,7 +125,7 @@ impl TcpStream {
     pub(crate) fn delete(&mut self, selector: &Selector, force: bool) -> io::Result<()> {
         if !self.state.delete_pending {
             if self.state.poll_state == SockPollState::SOCK_POLL_PENDING {
-                self.cancel_poll();
+                self.cancel_poll()?;
             }
             //get this TcpStream off Selector's update_queue
             selector.dequeue_update(*self);
@@ -196,15 +186,11 @@ impl TcpStream {
 
                     match r {
                         Ok(()) => Ok(()),
-                        Err(error) => {
-                            if error.raw_os_error() == Some(ERROR_INVALID_HANDLE as _) {
-                                return self.delete(selector, false);
-                            } else if error.raw_os_error() == Some(ERROR_IO_PENDING as _) {
-                                return Ok(());
-                            } else {
-                                return Err(error);
-                            }
+                        Err(ref e) if e.raw_os_error() == Some(ERROR_INVALID_HANDLE as _) => {
+                            self.delete(selector, false)
                         }
+                        Err(ref e) if e.raw_os_error() == Some(ERROR_IO_PENDING as _) => Ok(()),
+                        Err(e) => Err(e),
                     }
                 } else {
                     unreachable!();
