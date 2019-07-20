@@ -143,6 +143,15 @@ impl TcpStream {
             self.state.delete_pending = true;
         }
 
+        if force || self.state.poll_state == SockPollState::SOCK_POLL_IDLE {
+            selector.dequeue_delete(*self);
+
+            selector.release_poll_group(self.state.poll_group.unwrap());
+        //And then, free this TcpStream
+        } else {
+            selector.enqueue_delete(*self);
+        }
+
         Ok(())
     }
 

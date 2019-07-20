@@ -70,6 +70,8 @@ pub struct Selector {
     poll_count: i32,
     //We still need update_queue
     update_deque: VecDeque<AtomicPtr<TcpStream>>,
+    //We still need delete_queue
+    delete_queue: VecDeque<AtomicPtr<TcpStream>>,
 }
 
 struct SelectorInner {
@@ -94,6 +96,7 @@ impl Selector {
             poll_group_queue: PollGroupQueue::new(&port),
             poll_count: 0,
             update_deque: VecDeque::new(),
+            delete_queue: VecDeque::new(),
         })
     }
 
@@ -145,7 +148,16 @@ impl Selector {
         self.update_deque.push_back(element);
     }
 
+    pub(crate) fn enqueue_delete(&mut self, tcp_stream: TcpStream) {
+        let element = AtomicPtr::new(&mut tcp_stream as *mut _);
+        self.delete_queue.push_back(element);
+    }
+
     pub(crate) fn dequeue_update(&mut self, tcp_stream: TcpStream) {}
+
+    pub(crate) fn dequeue_delete(&mut self, tcp_stream: TcpStream) {}
+
+    pub(crate) fn release_poll_group(&mut self, poll_group: PollGroup) {}
 
     pub fn update_if_polling(&mut self) -> io::Result<()> {
         if self.poll_count > 0 {
