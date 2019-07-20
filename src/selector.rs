@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 use std::io;
 use std::os::windows::io::AsRawHandle;
 use std::ptr::null_mut;
-use std::sync::atomic::AtomicPtr;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -140,14 +140,18 @@ impl Selector {
         &self.inner.port
     }
 
-    fn request_update(&mut self, tcp_stream: TcpStream) {
+    pub(crate) fn enqueue_update(&mut self, tcp_stream: TcpStream) {
         let element = AtomicPtr::new(&mut tcp_stream as *mut _);
-        if !self.update_deque.contains(&element) {
-            self.update_deque.push_back(element)
-        }
+        self.update_deque.push_back(element);
     }
 
-    fn update_if_polling(&mut self) -> io::Result<()> {
+    pub fn update_if_polling(&mut self) -> io::Result<()> {
+        if self.poll_count > 0 {
+            while let Some(sock) = self.update_deque.pop_front() {
+                (*sock.load(Ordering::Relaxed)).update(self);
+            }
+        }
+
         Ok(())
     }
 
@@ -167,9 +171,7 @@ impl Selector {
 
         sock.set_poll_group(self.poll_group_queue.acquire().unwrap());
 
-        if let Some(tcp_stream) = sock.set_events(interests, token) {
-            self.request_update(tcp_stream);
-        }
+        sock.set_events(interests, token, self);
 
         self.update_if_polling()
     }
