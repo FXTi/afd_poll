@@ -158,7 +158,7 @@ lazy_static! {
         SecurityQualityOfService: NULL,
     };
     static ref init_done: bool = false;
-    static ref SOCK__KNOWN_EPOLL_EVENTS: u32 = EPOLLIN
+    static ref SOCK_KNOWN_EPOLL_EVENTS: u32 = EPOLLIN
         | EPOLLPRI
         | EPOLLOUT
         | EPOLLERR
@@ -336,6 +336,29 @@ unsafe fn slice2buf(slice: &[u8]) -> WSABUF {
 struct PollInfoBinding {
     overlapped: OVERLAPPED,
     poll_info: AFD_POLL_INFO,
+}
+
+impl PollInfoBinding {
+    fn new() -> PollInfoBinding {
+        PollInfoBinding {
+            overlapped: OVERLAPPED::default(),
+            poll_info: AFD_POLL_INFO {
+                Timeout: LARGE_INTEGER::default(),
+                NumberOfHandles: 1,
+                Exclusive: 0,
+                Handles: [AFD_POLL_HANDLE_INFO {
+                    Handle: NULL,
+                    Events: DWORD::default(),
+                    Status: 0,
+                }],
+            },
+        }
+    }
+}
+
+fn HasOverlappedIoCompleted(Overlapped: &OVERLAPPED) -> bool {
+    //This is function is rust version impl of C++ version impl in winbase.h by Microsoft
+    (*(&(*Overlapped) as *const OVERLAPPED)).Internal != (STATUS_PENDING as _)
 }
 
 fn interests_to_epoll(interests: Interests) -> u32 {
