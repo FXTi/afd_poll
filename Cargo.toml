@@ -12,6 +12,7 @@ widestring = "0.4.0"
 lazy_static = "1.3.0"
 miow = "0.3.3"
 libc = "0.2.58"
+#linked-list = "0.0.3" # Because multi-Cursor is not supported
 
 [dependencies.winapi]
 version = "0.3.7"

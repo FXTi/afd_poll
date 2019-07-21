@@ -1,4 +1,6 @@
+mod event;
 mod interests;
+mod ready;
 mod selector;
 mod tcp;
 mod token;
@@ -19,6 +21,7 @@ use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, MAKEWORD, ULONG, USHORT};
 const EPOLLET: u32 = 0x80000000; //Come from libc source code
 use std::net::{TcpListener, TcpStream};
 use std::os::windows::io::AsRawSocket;
+use std::sync::{Arc, Mutex};
 use std::{cmp, thread, time};
 use winapi::shared::ntdef::{NTSTATUS, NULL, PHANDLE, PUNICODE_STRING, PVOID, PWCH};
 use winapi::shared::ntstatus::{STATUS_PENDING, STATUS_SUCCESS};
@@ -162,7 +165,7 @@ lazy_static! {
         SecurityDescriptor: NULL,
         SecurityQualityOfService: NULL,
     };
-    static ref init_done: bool = false;
+    static ref init_done: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
     static ref SOCK_KNOWN_EPOLL_EVENTS: u32 = EPOLLIN
         | EPOLLPRI
         | EPOLLOUT
@@ -177,7 +180,7 @@ lazy_static! {
 }
 
 #[allow(non_snake_case)]
-fn afd_create_helper_handle(iocp: &mut HANDLE) -> io::Result<HANDLE> {
+fn afd_create_helper_handle(iocp: &HANDLE) -> io::Result<HANDLE> {
     let mut afd_helper_handle: HANDLE = NULL;
     let mut iosb = IO_STATUS_BLOCK {
         u: IO_STATUS_BLOCK_u { Status: 0 },
@@ -247,11 +250,12 @@ fn ws_global_init() -> io::Result<()> {
 }
 
 fn init() -> io::Result<()> {
-    if !*init_done {
+    let mut guard = init_done.lock().unwrap();
+    if !*guard {
         //Do WS's init for now
         ws_global_init()?;
 
-        *init_done = true;
+        *guard = true;
     }
 
     Ok(())
@@ -365,7 +369,7 @@ impl PollInfoBinding {
 
 fn HasOverlappedIoCompleted(Overlapped: &OVERLAPPED) -> bool {
     //This is function is rust version impl of C++ version impl in winbase.h by Microsoft
-    (*(&(*Overlapped) as *const OVERLAPPED)).Internal != (STATUS_PENDING as _)
+    unsafe { (*(&(*Overlapped) as *const OVERLAPPED)).Internal != (STATUS_PENDING as _) }
 }
 
 fn interests_to_epoll(interests: Interests) -> u32 {

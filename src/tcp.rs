@@ -69,18 +69,18 @@ impl TcpStream {
         self.sock.as_raw_socket() as SOCKET
     }
 
-    pub(crate) fn base_socket(&self) -> io::Result<SOCKET> {
+    pub(crate) fn base_socket(&mut self) -> io::Result<SOCKET> {
         ws_get_base_socket(&self.socket()).map(|base_socket| {
             self.state.base_sock = base_socket;
             base_socket
         })
     }
 
-    pub(crate) fn set_poll_group(&self, poll_group: PollGroup) {
+    pub(crate) fn set_poll_group(&mut self, poll_group: PollGroup) {
         self.state.poll_group = Some(poll_group);
     }
 
-    pub(crate) fn set_events(&self, interests: Interests, token: Token, selector: &Selector) {
+    pub(crate) fn set_events(&mut self, interests: Interests, token: Token, selector: &Selector) {
         self.state.user_events = interests_to_epoll(interests) | EPOLLERR | EPOLLHUP;
         self.state.user_data = usize::from(token) as u64;
 
@@ -91,7 +91,7 @@ impl TcpStream {
 
     pub(crate) fn request_update(&self, selector: &Selector) {
         if !self.state.update_enqueued {
-            selector.enqueue_update(*self);
+            selector.enqueue_update(&mut *self);
             self.state.update_enqueued = true;
         }
     }
@@ -139,7 +139,7 @@ impl TcpStream {
             selector.release_poll_group(self.state.poll_group.unwrap());
         //And then, free this TcpStream
         } else {
-            selector.enqueue_delete(*self);
+            selector.enqueue_delete(&mut *self);
         }
 
         Ok(())
