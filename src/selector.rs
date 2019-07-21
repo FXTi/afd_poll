@@ -193,11 +193,11 @@ impl Selector {
         self.delete_queue.push_back(element);
     }
 
-    pub(crate) fn dequeue_update(&mut self, tcp_stream: TcpStream) {}
+    pub(crate) fn dequeue_update(&mut self, tcp_stream: &mut TcpStream) {}
 
-    pub(crate) fn dequeue_delete(&mut self, tcp_stream: TcpStream) {}
+    pub(crate) fn dequeue_delete(&mut self, tcp_stream: &mut TcpStream) {}
 
-    pub(crate) fn release_poll_group(&mut self, poll_group: PollGroup) {}
+    pub(crate) fn release_poll_group(&mut self, poll_group: &PollGroup) {}
 
     fn update_events(&mut self) -> io::Result<()> {
         while let Some(sock) = self.update_deque.pop_front() {
@@ -217,7 +217,7 @@ impl Selector {
 
     pub fn register(
         &mut self,
-        sock: &TcpStream,
+        sock: &mut TcpStream,
         token: Token,
         interests: Interests,
     ) -> io::Result<()> {
