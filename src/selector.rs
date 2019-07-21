@@ -117,7 +117,9 @@ impl Selector {
         })
     }
 
-    fn check_iocp(&mut self) -> io::Result<()> {
+    fn check_iocp_port(&mut self) -> io::Result<()> {
+        //appear in epoll_ctl(), epoll_wait(), epoll_close()
+        //will add in future pr
         let mut flag: DWORD = DWORD::default();
 
         match self.port().as_raw_handle() {
@@ -284,7 +286,24 @@ impl Selector {
 
         self.update_if_polling()
     }
+
+    fn close(&mut self) -> io::Result<()> {
+        //identical with epoll_close(), will appear in Drop for `Selector`
+        init()?;
+
+        {
+            self.inner.lock.lock().unwrap();
+            //Drop on inner handle
+            //Actually call CloseHandle()
+            drop(&self.inner.port);
+        }
+
+        //Wepoll's port_delete() goes here.
+
+        Ok(())
+    }
 }
+
 #[derive(Debug)]
 pub struct Events {
     /// Raw I/O event completions are filled in here by the call to `get_many`
