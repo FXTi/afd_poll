@@ -1,8 +1,12 @@
 use crate::event::Event;
 use crate::interests::Interests;
-use crate::tcp::TcpStream;
+use crate::ready::Ready;
+use crate::tcp::{SockPollState, State, TcpStream};
 use crate::token::Token;
-use crate::{afd_create_helper_handle, init, sock_afd_events_to_epoll_events, PollInfoBinding};
+use crate::{
+    afd_create_helper_handle, init, sock_afd_events_to_epoll_events, PollInfoBinding,
+    AFD_POLL_INFO, AFD_POLL_LOCAL_CLOSE,
+};
 use crate::{
     EPOLLERR, EPOLLHUP, EPOLLIN, EPOLLMSG, EPOLLONESHOT, EPOLLOUT, EPOLLPRI, EPOLLRDBAND,
     EPOLLRDHUP, EPOLLRDNORM, EPOLLWRBAND, EPOLLWRNORM,
@@ -18,8 +22,10 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use winapi::shared::minwindef::DWORD;
+use winapi::shared::ntstatus::STATUS_CANCELLED;
 use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::handleapi::{GetHandleInformation, INVALID_HANDLE_VALUE};
+use winapi::um::minwinbase::OVERLAPPED;
 use winapi::um::winnt::HANDLE;
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
@@ -73,9 +79,9 @@ pub struct Selector {
     //to note the number of thread who is polling on this iocp port
     poll_count: i32,
     //We still need update_queue
-    update_deque: VecDeque<AtomicPtr<TcpStream>>,
+    update_deque: VecDeque<AtomicPtr<State>>,
     //We still need delete_queue
-    delete_queue: VecDeque<AtomicPtr<TcpStream>>,
+    delete_queue: VecDeque<AtomicPtr<State>>,
 }
 
 struct SelectorInner {
@@ -166,10 +172,13 @@ impl Selector {
                 }
                 */
 
-                //Extract events from lpOverlapped, problem is the lifetime of PollInfoBinding passed to underlaying API.
-                let afd_poll_info =
-                    unsafe { &(*(status.overlapped() as *const PollInfoBinding)).poll_info };
-                let iocp_events = sock_afd_events_to_epoll_events(&afd_poll_info.Handles[0].Events);
+                //Correctness of this convertion is unclear.
+                let mut socket = unsafe { &mut (*(status.overlapped() as *mut State)) };
+
+                match self.feed_event(socket)? {
+                    None => {}
+                    Some(ev) => events.events.push(ev),
+                }
             }
 
             self.update_if_polling()?;
@@ -179,23 +188,63 @@ impl Selector {
         Ok(())
     }
 
+    fn feed_event(&mut self, socket: &mut State) -> io::Result<Option<Event>> {
+        let poll_info = &socket.poll_info;
+        let mut epoll_events: u32 = 0;
+
+        socket.poll_state = SockPollState::SOCK_POLL_IDLE;
+        socket.pending_events = 0;
+
+        if socket.delete_pending {
+            socket.delete(self, false)?;
+            return Ok(None);
+        } else if socket.overlapped.Internal == STATUS_CANCELLED as _ {
+        } else if socket.overlapped.Internal < 0 {
+            epoll_events = EPOLLERR;
+        } else if socket.poll_info.NumberOfHandles < 1 {
+        } else if socket.poll_info.Handles[0].Events & AFD_POLL_LOCAL_CLOSE != 0 {
+            socket.delete(self, false)?;
+            return Ok(None);
+        } else {
+            epoll_events = sock_afd_events_to_epoll_events(&socket.poll_info.Handles[0].Events);
+        }
+
+        socket.request_update(self);
+
+        epoll_events &= socket.user_events;
+
+        match epoll_events {
+            0 => Ok(None),
+            _ => {
+                if socket.user_events & EPOLLONESHOT != 0 {
+                    socket.user_events = 0;
+                }
+
+                Ok(Some(Event::new(
+                    Ready::from_usize(epoll_events as _),
+                    Token::from(socket.user_data as usize),
+                )))
+            }
+        }
+    }
+
     pub fn port(&self) -> &CompletionPort {
         &self.inner.port
     }
 
-    pub(crate) fn enqueue_update(&mut self, tcp_stream: &mut TcpStream) {
+    pub(crate) fn enqueue_update(&mut self, tcp_stream: &mut State) {
         let element = AtomicPtr::new(&mut *tcp_stream as *mut _);
         self.update_deque.push_back(element);
     }
 
-    pub(crate) fn enqueue_delete(&mut self, tcp_stream: &mut TcpStream) {
+    pub(crate) fn enqueue_delete(&mut self, tcp_stream: &mut State) {
         let element = AtomicPtr::new(&mut *tcp_stream as *mut _);
         self.delete_queue.push_back(element);
     }
 
-    pub(crate) fn dequeue_update(&mut self, tcp_stream: &mut TcpStream) {}
+    pub(crate) fn dequeue_update(&mut self, tcp_stream: &mut State) {}
 
-    pub(crate) fn dequeue_delete(&mut self, tcp_stream: &mut TcpStream) {}
+    pub(crate) fn dequeue_delete(&mut self, tcp_stream: &mut State) {}
 
     pub(crate) fn release_poll_group(&mut self, poll_group: &PollGroup) {}
 

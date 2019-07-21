@@ -387,6 +387,8 @@ fn interests_to_epoll(interests: Interests) -> u32 {
     kind as u32
 }
 
+fn sock_feed_event(afd_poll_info: &AFD_POLL_INFO) {}
+
 #[test]
 fn test_tcp_listener() -> io::Result<()> {
     //epoll_create() start

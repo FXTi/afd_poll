@@ -17,6 +17,8 @@ use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::AsRawSocket;
 use std::ptr::null_mut;
 use std::sync::Arc;
+use winapi::shared::minwindef::DWORD;
+use winapi::shared::ntdef::NULL;
 use winapi::shared::winerror::{ERROR_INVALID_HANDLE, ERROR_IO_PENDING};
 use winapi::um::minwinbase::OVERLAPPED;
 use winapi::um::winnt::HANDLE;
@@ -24,22 +26,24 @@ use winapi::um::winnt::LARGE_INTEGER;
 use winapi::um::winsock2::SOCKET;
 
 #[derive(PartialEq)]
-enum SockPollState {
+pub(crate) enum SockPollState {
     SOCK_POLL_IDLE,
     SOCK_POLL_PENDING,
     SOCK_POLL_CANCELLED,
 }
 
-struct State {
-    base_sock: SOCKET,
-    poll_group: Option<PollGroup>,
-    user_events: u32,
-    pending_events: u32,
-    user_data: u64,
-    update_enqueued: bool, //to note if this TcpStream is in selector's update_queue
-    delete_pending: bool,
-    poll_state: SockPollState,
-    binding: PollInfoBinding,
+#[repr(C)]
+pub(crate) struct State {
+    pub overlapped: OVERLAPPED,
+    pub poll_info: AFD_POLL_INFO,
+    pub base_sock: SOCKET,
+    pub poll_group: Option<PollGroup>,
+    pub user_events: u32,
+    pub pending_events: u32,
+    pub user_data: u64,
+    pub update_enqueued: bool, //to note if this TcpStream is in selector's update_queue
+    pub delete_pending: bool,
+    pub poll_state: SockPollState,
 }
 
 pub struct TcpStream {
@@ -60,7 +64,17 @@ impl TcpStream {
                 update_enqueued: false,
                 delete_pending: false,
                 poll_state: SockPollState::SOCK_POLL_IDLE,
-                binding: PollInfoBinding::new(),
+                overlapped: OVERLAPPED::default(),
+                poll_info: AFD_POLL_INFO {
+                    Timeout: LARGE_INTEGER::default(),
+                    NumberOfHandles: 1,
+                    Exclusive: 0,
+                    Handles: [AFD_POLL_HANDLE_INFO {
+                        Handle: NULL,
+                        Events: DWORD::default(),
+                        Status: 0,
+                    }],
+                },
             },
         }
     }
@@ -95,21 +109,39 @@ impl TcpStream {
     }
 
     pub(crate) fn request_update(&mut self, selector: &mut Selector) {
-        if !self.state.update_enqueued {
+        self.state.request_update(selector)
+    }
+
+    fn cancel_poll(&mut self) -> io::Result<()> {
+        self.state.cancel_poll()
+    }
+
+    pub(crate) fn delete(&mut self, selector: &mut Selector, force: bool) -> io::Result<()> {
+        self.state.delete(selector, force)
+    }
+
+    pub(crate) fn update(&mut self, selector: &mut Selector) -> io::Result<()> {
+        self.state.update(selector)
+    }
+}
+
+impl State {
+    pub(crate) fn request_update(&mut self, selector: &mut Selector) {
+        if !self.update_enqueued {
             selector.enqueue_update(&mut *self);
-            self.state.update_enqueued = true;
+            self.update_enqueued = true;
         }
     }
 
     fn cancel_poll(&mut self) -> io::Result<()> {
-        assert!(self.state.poll_state == SockPollState::SOCK_POLL_PENDING);
+        assert!(self.poll_state == SockPollState::SOCK_POLL_PENDING);
 
-        if !HasOverlappedIoCompleted(&self.state.binding.overlapped) {
-            if let Some(ref poll_group) = self.state.poll_group {
+        if !HasOverlappedIoCompleted(&self.overlapped) {
+            if let Some(ref poll_group) = self.poll_group {
                 let ret = unsafe {
                     winapi::um::ioapiset::CancelIoEx(
                         poll_group.afd_helper_handle,
-                        &mut self.state.binding.overlapped as *mut _,
+                        &mut self.overlapped as *mut _,
                     )
                 };
                 match ret {
@@ -124,26 +156,26 @@ impl TcpStream {
             }
         }
 
-        self.state.poll_state = SockPollState::SOCK_POLL_CANCELLED;
-        self.state.pending_events = 0;
+        self.poll_state = SockPollState::SOCK_POLL_CANCELLED;
+        self.pending_events = 0;
         Ok(())
     }
 
     pub(crate) fn delete(&mut self, selector: &mut Selector, force: bool) -> io::Result<()> {
-        if !self.state.delete_pending {
-            if self.state.poll_state == SockPollState::SOCK_POLL_PENDING {
+        if !self.delete_pending {
+            if self.poll_state == SockPollState::SOCK_POLL_PENDING {
                 self.cancel_poll()?;
             }
             //get this TcpStream off Selector's update_queue
             selector.dequeue_update(&mut *self);
 
-            self.state.delete_pending = true;
+            self.delete_pending = true;
         }
 
-        if force || self.state.poll_state == SockPollState::SOCK_POLL_IDLE {
+        if force || self.poll_state == SockPollState::SOCK_POLL_IDLE {
             selector.dequeue_delete(&mut *self);
 
-            if let Some(ref pg) = self.state.poll_group {
+            if let Some(ref pg) = self.poll_group {
                 selector.release_poll_group(pg);
             } else {
                 unreachable!();
@@ -157,14 +189,11 @@ impl TcpStream {
     }
 
     pub(crate) fn update(&mut self, selector: &mut Selector) -> io::Result<()> {
-        assert!(!self.state.delete_pending);
+        assert!(!self.delete_pending);
 
-        match self.state.poll_state {
+        match self.poll_state {
             SockPollState::SOCK_POLL_PENDING => {
-                if 0 != (self.state.user_events
-                    & *SOCK_KNOWN_EPOLL_EVENTS
-                    & !self.state.pending_events)
-                {
+                if 0 != (self.user_events & *SOCK_KNOWN_EPOLL_EVENTS & !self.pending_events) {
                     self.cancel_poll()
                 } else {
                     Ok(())
@@ -173,26 +202,24 @@ impl TcpStream {
             SockPollState::SOCK_POLL_CANCELLED => Ok(()),
             SockPollState::SOCK_POLL_IDLE => {
                 //Start a new poll operation
-                self.state.binding = PollInfoBinding {
-                    overlapped: OVERLAPPED::default(),
-                    poll_info: AFD_POLL_INFO {
-                        Timeout: LARGE_INTEGER::default(),
-                        NumberOfHandles: 1,
-                        Exclusive: 0,
-                        Handles: [AFD_POLL_HANDLE_INFO {
-                            Handle: self.state.base_sock as HANDLE,
-                            Events: sock_epoll_events_to_afd_events(self.state.user_events),
-                            Status: 0,
-                        }],
-                    },
+                self.overlapped = OVERLAPPED::default();
+                self.poll_info = AFD_POLL_INFO {
+                    Timeout: LARGE_INTEGER::default(),
+                    NumberOfHandles: 1,
+                    Exclusive: 0,
+                    Handles: [AFD_POLL_HANDLE_INFO {
+                        Handle: self.base_sock as HANDLE,
+                        Events: sock_epoll_events_to_afd_events(self.user_events),
+                        Status: 0,
+                    }],
                 };
-                unsafe { *self.state.binding.poll_info.Timeout.QuadPart_mut() = i64::max_value() };
+                unsafe { *self.poll_info.Timeout.QuadPart_mut() = i64::max_value() };
 
-                if let Some(ref poll_group) = self.state.poll_group {
+                if let Some(ref poll_group) = self.poll_group {
                     let r = afd_poll(
                         poll_group.afd_helper_handle,
-                        &mut self.state.binding.poll_info,
-                        &mut self.state.binding.overlapped,
+                        &mut self.poll_info,
+                        &mut self.overlapped,
                     );
 
                     match r {
