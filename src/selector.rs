@@ -117,23 +117,6 @@ impl Selector {
         })
     }
 
-    fn check_iocp_port(&mut self) -> io::Result<()> {
-        //appear in epoll_ctl(), epoll_wait(), epoll_close()
-        //will add in future pr
-        let mut flag: DWORD = DWORD::default();
-
-        match self.port().as_raw_handle() {
-            INVALID_HANDLE_VALUE => Err(io::Error::last_os_error()),
-            iocp_handle => {
-                if 0 == unsafe { GetHandleInformation(iocp_handle, &mut flag as *mut _) } {
-                    Err(io::Error::last_os_error())
-                } else {
-                    Ok(())
-                }
-            }
-        }
-    }
-
     pub fn select(&mut self, events: &mut Events, timeout: Option<Duration>) -> io::Result<()> {
         //init() appear in four functions in epoll
         //They are just four critical functions, epoll_*
