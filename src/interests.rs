@@ -9,19 +9,6 @@ use std::{fmt, ops};
 /// event will be returned from a call to [`poll`].
 ///
 /// The size of `Option<Interests>` should be identical to itself.
-///
-/// ```
-/// use std::mem::size_of;
-/// use mio::Interests;
-///
-/// assert_eq!(size_of::<Option<Interests>>(), size_of::<Interests>());
-/// ```
-///
-/// [registering]: crate::Registry::register
-/// [`event::Source`]: crate::event::Source
-/// [`Poll`]: crate::Poll
-/// [readable]: Interests::READABLE
-/// [`poll`]: crate::Poll::poll
 #[derive(Copy, PartialEq, Eq, Clone, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Interests(NonZeroU8);
