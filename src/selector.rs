@@ -85,6 +85,13 @@ impl PollGroupQueue {
         self.queue[n - 1].group_size += 1;
         Ok(self.queue[n - 1].clone())
     }
+
+    pub fn remove(&mut self, element: &PollGroup) {
+        let pos = self.queue.iter().position(|x| *x == *element).unwrap();
+        self.queue[pos].group_size -= 1;
+        let tail = self.queue.remove(pos);
+        self.queue.push(tail);
+    }
 }
 
 struct QueueInner<T>(pub AtomicPtr<T>);
@@ -285,7 +292,9 @@ impl Selector {
         self.delete_queue.remove(&element);
     }
 
-    pub(crate) fn release_poll_group(&mut self, poll_group: &PollGroup) {}
+    pub(crate) fn release_poll_group(&mut self, poll_group: &PollGroup) {
+        let pos = self.poll_group_queue.remove(poll_group);
+    }
 
     fn update_events(&mut self) -> io::Result<()> {
         let mut copy = self.update_deque.clone();
