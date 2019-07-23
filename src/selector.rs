@@ -39,6 +39,20 @@ pub struct PollGroup {
     pub afd_helper_handle: HANDLE,
 }
 
+impl PartialEq for PollGroup {
+    fn eq(&self, other: &PollGroup) -> bool {
+        self.afd_helper_handle == other.afd_helper_handle
+    }
+}
+
+impl Eq for PollGroup {}
+
+impl Hash for PollGroup {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.afd_helper_handle.hash(state);
+    }
+}
+
 impl PollGroup {
     pub fn new(iocp: &HANDLE) -> io::Result<PollGroup> {
         afd_create_helper_handle(iocp).map(|achh| PollGroup {
@@ -71,9 +85,22 @@ impl PollGroupQueue {
         self.queue[n - 1].group_size += 1;
         Ok(self.queue[n - 1].clone())
     }
+
+    pub fn remove(&mut self, element: &PollGroup) {
+        let pos = self.queue.iter().position(|x| *x == *element).unwrap();
+        self.queue[pos].group_size -= 1;
+        let tail = self.queue.remove(pos);
+        self.queue.push(tail);
+    }
 }
 
 struct QueueInner<T>(pub AtomicPtr<T>);
+
+impl<T> Clone for QueueInner<T> {
+    fn clone(&self) -> Self {
+        QueueInner(AtomicPtr::from(self.load(Ordering::Relaxed)))
+    }
+}
 
 impl<T> std::ops::Deref for QueueInner<T> {
     type Target = AtomicPtr<T>;
@@ -104,9 +131,9 @@ pub struct Selector {
     //to note the number of thread who is polling on this iocp port
     poll_count: i32,
     //We still need update_queue
-    update_deque: VecDeque<AtomicPtr<State>>,
+    update_deque: HashSet<QueueInner<State>>,
     //We still need delete_queue
-    delete_queue: VecDeque<AtomicPtr<State>>,
+    delete_queue: HashSet<QueueInner<State>>,
     //set to track all TcpStream register on it.
     sock_set: HashSet<QueueInner<TcpStream>>,
 }
@@ -139,8 +166,8 @@ impl Selector {
             inner: Arc::new(SelectorInner::new(id, &port)),
             poll_group_queue: PollGroupQueue::new(&port),
             poll_count: 0,
-            update_deque: VecDeque::new(),
-            delete_queue: VecDeque::new(),
+            update_deque: HashSet::new(),
+            delete_queue: HashSet::new(),
             sock_set: HashSet::new(),
         })
     }
@@ -246,24 +273,34 @@ impl Selector {
     }
 
     pub(crate) fn enqueue_update(&mut self, tcp_stream: &mut State) {
-        let element = AtomicPtr::new(&mut *tcp_stream as *mut _);
-        self.update_deque.push_back(element);
+        let element = QueueInner(AtomicPtr::new(&mut *tcp_stream as *mut _));
+        self.update_deque.insert(element);
     }
 
     pub(crate) fn enqueue_delete(&mut self, tcp_stream: &mut State) {
-        let element = AtomicPtr::new(&mut *tcp_stream as *mut _);
-        self.delete_queue.push_back(element);
+        let element = QueueInner(AtomicPtr::new(&mut *tcp_stream as *mut _));
+        self.delete_queue.insert(element);
     }
 
-    pub(crate) fn dequeue_update(&mut self, tcp_stream: &mut State) {}
+    pub(crate) fn dequeue_update(&mut self, tcp_stream: &mut State) {
+        let element = QueueInner(AtomicPtr::new(&mut *tcp_stream as *mut _));
+        self.update_deque.remove(&element);
+    }
 
-    pub(crate) fn dequeue_delete(&mut self, tcp_stream: &mut State) {}
+    pub(crate) fn dequeue_delete(&mut self, tcp_stream: &mut State) {
+        let element = QueueInner(AtomicPtr::new(&mut *tcp_stream as *mut _));
+        self.delete_queue.remove(&element);
+    }
 
-    pub(crate) fn release_poll_group(&mut self, poll_group: &PollGroup) {}
+    pub(crate) fn release_poll_group(&mut self, poll_group: &PollGroup) {
+        let pos = self.poll_group_queue.remove(poll_group);
+    }
 
     fn update_events(&mut self) -> io::Result<()> {
-        while let Some(sock) = self.update_deque.pop_front() {
-            unsafe { (*sock.load(Ordering::Relaxed)).update(self)? };
+        let mut copy = self.update_deque.clone();
+        for sock in copy.iter() {
+            unsafe { (*(sock.load(Ordering::Relaxed) as *mut State)).update(self)? };
+            self.update_deque.remove(&sock);
         }
 
         Ok(())
