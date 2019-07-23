@@ -12,7 +12,8 @@ use crate::{
     EPOLLRDHUP, EPOLLRDNORM, EPOLLWRBAND, EPOLLWRNORM,
 };
 use miow::iocp::{CompletionPort, CompletionStatus};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::FromRawHandle;
@@ -72,6 +73,30 @@ impl PollGroupQueue {
     }
 }
 
+struct QueueInner<T>(pub AtomicPtr<T>);
+
+impl<T> std::ops::Deref for QueueInner<T> {
+    type Target = AtomicPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> PartialEq for QueueInner<T> {
+    fn eq(&self, other: &QueueInner<T>) -> bool {
+        self.load(Ordering::Relaxed) == other.load(Ordering::Relaxed)
+    }
+}
+
+impl<T> Eq for QueueInner<T> {}
+
+impl<T> Hash for QueueInner<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.load(Ordering::Relaxed)).hash(state);
+    }
+}
+
 pub struct Selector {
     inner: Arc<SelectorInner>,
     //act as poll_group in wepoll, to manage limited use of afd_helper_handle
@@ -82,6 +107,8 @@ pub struct Selector {
     update_deque: VecDeque<AtomicPtr<State>>,
     //We still need delete_queue
     delete_queue: VecDeque<AtomicPtr<State>>,
+    //set to track all TcpStream register on it.
+    sock_set: HashSet<QueueInner<TcpStream>>,
 }
 
 struct SelectorInner {
@@ -114,6 +141,7 @@ impl Selector {
             poll_count: 0,
             update_deque: VecDeque::new(),
             delete_queue: VecDeque::new(),
+            sock_set: HashSet::new(),
         })
     }
 
